@@ -1187,37 +1187,65 @@ function stepRepeat() {
   return busy;
 }
 
+// "N=100 σ=0,320 (0,308)": measured spread of the estimates, theoretical σ in brackets.
+function legendText(N) {
+  const hd = REP.data[N];
+  const mean = hd.fin ? hd.sum / hd.fin : 0;
+  const sd = hd.fin > 1 ? Math.sqrt(Math.max(0, (hd.sumSq - hd.fin * mean * mean) / (hd.fin - 1))) : 0;
+  const prog = hd.runs < REP_RUNS ? ` ${hd.runs}/${REP_RUNS}` : '';
+  return `N=${int(N)} σ=${dec(sd, 3)} (${dec(sigmaFor(N), 3)})${prog}`;
+}
+
 function drawHist() {
   const c = cvx, d = G.dpr, w = cvCv.width, h = cvCv.height;
   const pl = 12 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d, pw = w - pl - pr, ph = h - pt - pb;
   const R = repRange(), lo = PI - R, bw = 2 * R / REP_BINS;
-  const X = e => pl + (e - lo) / (2 * R) * pw;
+  const Xe = e => pl + (e - lo) / (2 * R) * pw;
   c.clearRect(0, 0, w, h);
   c.fillStyle = 'rgba(255,255,255,0.02)'; c.fillRect(pl, pt, pw, ph);
-
   const shown = REP_SIZES.filter(N => REP.data[N]);
+
+  // Legend strip at the top (measured σ vs. theory), wrapped into rows; the bars are scaled
+  // to the space below it, so curves and text never overlap.
+  c.font = font(10.5, 600);
+  const gap = 14 * d, rows = [];
+  let row = [], rowW = 0;
+  for (const N of shown) {
+    const it = { N, text: legendText(N) };
+    it.w = c.measureText(it.text).width;
+    if (row.length && rowW + gap + it.w > pw - 10 * d) { rows.push(row); row = []; rowW = 0; }
+    rowW += (row.length ? gap : 0) + it.w;
+    row.push(it);
+  }
+  if (row.length) rows.push(row);
+  const lh = rows.length ? (rows.length * 14 + 6) * d : 0;
+
   c.save();
   c.beginPath(); c.rect(pl, pt, pw, ph); c.clip();
   for (const N of shown) {
     const hd = REP.data[N], col = REP_COLORS[N], sig = sigmaFor(N);
     const expected = e => REP_RUNS * (Phi((e + bw / 2 - PI) / sig) - Phi((e - bw / 2 - PI) / sig));
-    // Each bell is scaled to its own theoretical peak, so bars grow up towards the dashed curve.
+    // Each bell is scaled to its own peak, so bars grow up towards the dashed theory curve.
     const top = Math.max(expected(PI), ...hd.counts) * 1.08;
-    const Y = v => pt + ph - v / top * ph;
-    c.beginPath(); c.moveTo(X(lo), Y(0));
-    for (let b = 0; b < REP_BINS; b++) { c.lineTo(X(lo + b * bw), Y(hd.counts[b])); c.lineTo(X(lo + (b + 1) * bw), Y(hd.counts[b])); }
-    c.lineTo(X(PI + R), Y(0)); c.closePath();
+    const Yv = v => pt + ph - v / top * (ph - lh);
+    c.beginPath(); c.moveTo(Xe(lo), Yv(0));
+    for (let b = 0; b < REP_BINS; b++) { c.lineTo(Xe(lo + b * bw), Yv(hd.counts[b])); c.lineTo(Xe(lo + (b + 1) * bw), Yv(hd.counts[b])); }
+    c.lineTo(Xe(PI + R), Yv(0)); c.closePath();
     c.fillStyle = `rgba(${col},0.28)`; c.fill();
     c.strokeStyle = `rgba(${col},0.95)`; c.lineWidth = 1.3 * d; c.stroke();
     c.beginPath();
     for (let i = 0; i <= 240; i++) {
       const e = lo + i / 240 * 2 * R;
-      i ? c.lineTo(X(e), Y(expected(e))) : c.moveTo(X(e), Y(expected(e)));
+      i ? c.lineTo(Xe(e), Yv(expected(e))) : c.moveTo(Xe(e), Yv(expected(e)));
     }
     c.setLineDash([4 * d, 3 * d]); c.strokeStyle = `rgba(${col},0.9)`; c.lineWidth = 1.2 * d; c.stroke(); c.setLineDash([]);
   }
   c.setLineDash([6 * d, 5 * d]); c.strokeStyle = 'rgba(255,209,102,0.85)'; c.lineWidth = 1.4 * d;
-  c.beginPath(); c.moveTo(X(PI), pt); c.lineTo(X(PI), pt + ph); c.stroke(); c.setLineDash([]);
+  c.beginPath(); c.moveTo(Xe(PI), pt + lh); c.lineTo(Xe(PI), pt + ph); c.stroke(); c.setLineDash([]);
+  if (lh) {
+    c.strokeStyle = 'rgba(255,255,255,0.08)'; c.lineWidth = 1 * d;
+    c.beginPath(); c.moveTo(pl, pt + lh - 2 * d); c.lineTo(pl + pw, pt + lh - 2 * d); c.stroke();
+  }
   c.restore();
 
   c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d; c.strokeRect(pl, pt, pw, ph);
@@ -1225,7 +1253,7 @@ function drawHist() {
   const dd = R < 0.1 ? 3 : 2;
   c.textAlign = 'left'; c.fillText(dec(PI - R, dd), pl, pt + ph + 5 * d);
   c.textAlign = 'right'; c.fillText(dec(PI + R, dd), pl + pw, pt + ph + 5 * d);
-  c.textAlign = 'center'; c.fillStyle = '#ffd166'; c.font = font(12, 700); c.fillText('π', X(PI), pt + ph + 4 * d);
+  c.textAlign = 'center'; c.fillStyle = '#ffd166'; c.font = font(12, 700); c.fillText('π', Xe(PI), pt + ph + 4 * d);
 
   c.textBaseline = 'middle';
   if (!shown.length) {
@@ -1233,15 +1261,14 @@ function drawHist() {
     c.fillText(T.histEmpty, pl + pw / 2, pt + ph / 2);
     return;
   }
-  // legend: measured spread vs. theory
   c.font = font(10.5, 600); c.textAlign = 'left';
-  shown.forEach((N, i) => {
-    const hd = REP.data[N];
-    const mean = hd.fin ? hd.sum / hd.fin : 0;
-    const sd = hd.fin > 1 ? Math.sqrt(Math.max(0, (hd.sumSq - hd.fin * mean * mean) / (hd.fin - 1))) : 0;
-    const prog = hd.runs < REP_RUNS ? `  ${hd.runs}/${REP_RUNS}` : '';
-    c.fillStyle = `rgb(${REP_COLORS[N]})`;
-    c.fillText(`N=${int(N)}  σ=${dec(sd, 3)} (${dec(sigmaFor(N), 3)})${prog}`, pl + 5 * d, pt + (9 + i * 14) * d);
+  rows.forEach((r, i) => {
+    let x = pl + 5 * d;
+    for (const it of r) {
+      c.fillStyle = `rgb(${REP_COLORS[it.N]})`;
+      c.fillText(it.text, x, pt + (9 + i * 14) * d);
+      x += it.w + gap;
+    }
   });
 }
 

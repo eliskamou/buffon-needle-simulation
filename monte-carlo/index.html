@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="cs" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monte Carlo π</title>
+<style>
+  :root {
+    --bg0: #05070f;
+    --panel: rgba(16, 22, 50, 0.62);
+    --border: rgba(140, 160, 255, 0.16);
+    --text: #e8ecff;
+    --muted: #8e98c7;
+    --hit: #ff4fa3;
+    --miss: #40d2ff;
+    --gold: #ffd166;
+    --violet: #7b5cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1200px 800px at 15% 0%, #17215a 0%, transparent 60%),
+      radial-gradient(900px 700px at 100% 100%, #34104a 0%, transparent 60%),
+      var(--bg0);
+  }
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 22px; border-bottom: 1px solid var(--border); }
+  .logo { width: 42px; height: 42px; flex: none; filter: drop-shadow(0 0 10px rgba(255, 79, 163, .5)); }
+  .brand h1 {
+    font-size: 24px; font-weight: 800; letter-spacing: .3px;
+    background: linear-gradient(90deg, #ffffff, #b9b3ff 45%, #ff8cc6);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand p { color: var(--muted); font-size: 13.5px; margin-top: 1px; }
+  .hdr-actions { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- layout ---------- */
+  main { display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+  #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+  #board { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  aside {
+    overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+    border-left: 1px solid var(--border);
+    scrollbar-width: thin; scrollbar-color: rgba(140,160,255,.25) transparent;
+  }
+
+  .overlay { position: absolute; pointer-events: none; font-size: 13px; color: var(--muted); }
+  #boardInfo { top: 12px; left: 20px; right: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    background: rgba(10, 14, 34, .7); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; backdrop-filter: blur(6px); white-space: nowrap;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  #legend { bottom: 12px; left: 20px; display: flex; gap: 10px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; margin: -2px 7px 0 0; }
+  .dot.hit { background: var(--hit); box-shadow: 0 0 8px var(--hit); }
+  .dot.miss { background: var(--miss); box-shadow: 0 0 8px var(--miss); }
+  #hint {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 22px; font-weight: 600; color: #fff; text-align: center;
+    padding: 18px 28px; border-radius: 18px;
+    background: rgba(10, 14, 34, .72); border: 1px solid var(--border);
+    backdrop-filter: blur(8px); box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  #hint small { display: block; font-size: 14px; font-weight: 400; color: var(--muted); margin-top: 6px; }
+  #hint.hidden { display: none; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 rgba(255,79,163,0), 0 20px 60px rgba(0,0,0,.5); }
+                     50% { box-shadow: 0 0 40px rgba(255,79,163,.35), 0 20px 60px rgba(0,0,0,.5); } }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 12px 16px; backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .card h3 {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted);
+    font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .card h3 > span { white-space: nowrap; }
+  .card h3 span:last-child { text-transform: none; letter-spacing: 0; font-weight: 500; opacity: .85; }
+
+  .pi-value {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    font-size: 54px; font-weight: 700; line-height: 1.05; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .pi-value .ok { color: var(--gold); text-shadow: 0 0 22px rgba(255, 209, 102, .65); }
+  .pi-value .no { color: #dfe4ff; opacity: .5; }
+  /* always two fixed lines (error, then badge) so the panel never jumps as the texts change length */
+  .pi-sub { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; color: var(--muted); font-size: 13px; margin-top: 4px; }
+  #piErr { min-height: 1.3em; line-height: 1.3; white-space: nowrap; }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--gold); white-space: nowrap;
+    background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .3);
+    padding: 3px 10px; border-radius: 999px; transition: transform .25s;
+  }
+  .badge.pop { transform: scale(1.12); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); border-radius: 10px; padding: 6px 8px; min-width: 0; }
+  .stat .k { display: block; font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+  .stat .v { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .v.hit { color: #ff8cc6; }
+  .formula {
+    margin-top: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px;
+    color: #c9cff5; text-align: center; padding: 8px; border-radius: 10px; background: rgba(123, 92, 255, .08);
+    border: 1px dashed rgba(123, 92, 255, .3); line-height: 1.5; white-space: nowrap; overflow: hidden;
+  }
+
+  /* ---------- controls ---------- */
+  .ctrl { margin-bottom: 10px; }
+  .ctrl-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; margin-bottom: 7px; }
+  .ctrl-top .val { font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+  .note { font-size: 11.5px; color: var(--muted); margin: -4px 0 10px; min-height: 2.6em; line-height: 1.3; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 6px; outline: none; cursor: pointer;
+    background: linear-gradient(90deg, var(--violet), var(--hit) var(--fill, 50%), rgba(255,255,255,.12) var(--fill, 50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: none;
+    box-shadow: 0 0 0 4px rgba(123, 92, 255, .35), 0 0 16px rgba(255, 79, 163, .7);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%; background: #fff; border: none;
+    box-shadow: 0 0 0 4px rgba(123, 92, 255, .35), 0 0 16px rgba(255, 79, 163, .7);
+  }
+
+  .seg { display: flex; background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button {
+    flex: 1; border: none; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+    padding: 6px 4px; border-radius: 7px; cursor: pointer; transition: .15s;
+  }
+  .seg button.on { background: linear-gradient(135deg, rgba(123,92,255,.55), rgba(255,79,163,.45)); color: #fff; }
+
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text);
+    border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background .15s, border-color .15s, transform .08s;
+  }
+  .btn:hover { background: rgba(255,255,255,.1); border-color: rgba(160,170,255,.45); }
+  .btn:active { transform: scale(.97); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--violet), var(--hit)); border: none; color: #fff;
+    box-shadow: 0 6px 22px rgba(255, 79, 163, .35);
+  }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.icon { padding: 8px 11px; }
+  .row { display: flex; gap: 8px; }
+  .row .btn { flex: 1; padding-left: 4px; padding-right: 4px; }
+  .row + .row { margin-top: 8px; }
+  #btnPlay { flex: 2; font-size: 16px; }
+
+  .switches { display: flex; gap: 18px; flex-wrap: wrap; }
+  .switch { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; margin-top: 10px; user-select: none; }
+  .switch input { display: none; }
+  .switch .track { width: 38px; height: 22px; border-radius: 22px; background: rgba(255,255,255,.12); position: relative; transition: .2s; flex: none; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch input:checked + .track { background: linear-gradient(135deg, var(--violet), var(--hit)); }
+  .switch input:checked + .track::after { left: 19px; }
+
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent; font: inherit; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1.4px; font-weight: 700; font-size: 11.5px;
+    padding: 0 0 3px; margin-right: 10px; cursor: pointer; letter-spacing: .6px; white-space: nowrap;
+  }
+  .tab.on { color: #fff; border-bottom-color: var(--hit); }
+  .histbtns { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+  .histbtns button {
+    border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); border-radius: 999px;
+    font: inherit; font-size: 11px; font-weight: 700; padding: 2px 8px; cursor: pointer;
+  }
+  .histbtns button:hover { border-color: rgba(255,79,163,.6); background: rgba(255,79,163,.15); }
+  .chart { width: 100%; height: 200px; display: block; }
+  @media (max-height: 950px) { .chart { height: 160px; } }
+  .chart-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; min-height: 2.6em; line-height: 1.3; }
+  .kbd { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.7; }
+  kbd {
+    font-family: inherit; font-size: 11px; padding: 1px 6px; border-radius: 5px;
+    border: 1px solid var(--border); background: rgba(255,255,255,.05); color: #cdd3f5;
+  }
+
+  /* ---------- theory modal ---------- */
+  #modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px;
+    background: rgba(3, 5, 14, .7); backdrop-filter: blur(8px); z-index: 10;
+  }
+  #modal.open { display: flex; }
+  #modal .card { max-width: 760px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 26px 30px; position: relative; background: rgba(16, 22, 50, .95); }
+  #modal h2 { font-size: 24px; margin-bottom: 12px; }
+  #modal h4 { font-size: 15px; margin: 18px 0 6px; color: #b9b3ff; }
+  #modal p, #modal li { font-size: 15px; line-height: 1.6; color: #d4d9f5; }
+  #modal ul { padding-left: 20px; }
+  #modal li + li { margin-top: 6px; }
+  #modal .eq {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 16px; text-align: center; margin: 12px 0;
+    padding: 12px; border-radius: 12px; background: rgba(123, 92, 255, .1); border: 1px solid rgba(123, 92, 255, .3); color: #fff;
+  }
+  #modal .close { position: absolute; top: 14px; right: 14px; }
+
+  @media (max-width: 1000px) {
+    html, body { overflow: auto; }
+    #app { height: auto; }
+    main { grid-template-columns: 1fr; }
+    #stage { height: 70vh; }
+    aside { border-left: none; overflow: visible; }
+    .brand p { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#7b5cff"/><stop offset="1" stop-color="#ff4fa3"/></linearGradient></defs>
+      <rect x="4" y="4" width="40" height="40" rx="4" fill="none" stroke="#a99cff" stroke-width="1.5" opacity=".7"/>
+      <circle cx="24" cy="24" r="20" fill="none" stroke="url(#lg)" stroke-width="3"/>
+      <circle cx="18" cy="20" r="2.4" fill="#ff8cc6"/><circle cx="29" cy="30" r="2.4" fill="#ff8cc6"/>
+      <circle cx="26" cy="15" r="2.4" fill="#ff8cc6"/><circle cx="40" cy="41" r="2.4" fill="#7fe3ff"/>
+      <circle cx="7" cy="8" r="2.4" fill="#7fe3ff"/>
+    </svg>
+    <div class="brand">
+      <h1 data-i18n="title"></h1>
+      <p data-i18n="subtitle"></p>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn" id="btnTheory" data-i18n="theoryBtn"></button>
+      <button class="btn icon" id="btnLang" title="Language / Jazyk"></button>
+      <button class="btn icon" id="btnFull" data-i18n-title="fullscreen">⛶</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="stage">
+      <canvas id="board"></canvas>
+      <div class="overlay" id="boardInfo"></div>
+      <div class="overlay" id="legend">
+        <span class="chip"><span class="dot hit"></span><span data-i18n="legendHit"></span></span>
+        <span class="chip"><span class="dot miss"></span><span data-i18n="legendMiss"></span></span>
+      </div>
+      <div class="overlay" id="hint"><span data-i18n="hint"></span><small data-i18n="hintSmall"></small></div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h3><span data-i18n="estimate"></span><span id="piTrue">π = 3.14159265…</span></h3>
+        <div class="pi-value" id="piValue">—</div>
+        <div class="pi-sub"><span id="piErr"></span><span class="badge" id="badge"></span></div>
+        <div class="stats">
+          <div class="stat"><span class="k" data-i18n="points"></span><span class="v" id="stN">0</span></div>
+          <div class="stat"><span class="k" data-i18n="inside"></span><span class="v hit" id="stK">0</span></div>
+          <div class="stat"><span class="k">K / N</span><span class="v" id="stP">—</span></div>
+          <div class="stat"><span class="k" data-i18n="theory"></span><span class="v" id="stPT">—</span></div>
+        </div>
+        <div class="formula" id="formula"></div>
+      </div>
+
+      <div class="card">
+        <div class="ctrl">
+          <div class="ctrl-top"><span data-i18n="generator"></span></div>
+          <div class="seg" id="genSeg">
+            <button data-gen="random" data-i18n="genRandom"></button>
+            <button data-gen="halton" data-i18n="genHalton"></button>
+            <button data-gen="lcg" data-i18n="genLcg"></button>
+          </div>
+        </div>
+        <div class="note" id="genNote"></div>
+        <div class="ctrl">
+          <div class="ctrl-top"><span data-i18n="speed"></span><span class="val" id="rVal"></span></div>
+          <input type="range" id="rSlider" min="0" max="1000" step="1">
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnPlay"></button>
+          <button class="btn" id="btnReset" data-i18n="reset"></button>
+        </div>
+        <div class="row">
+          <button class="btn" data-drop="1">+1</button>
+          <button class="btn" data-drop="10">+10</button>
+          <button class="btn" data-drop="100">+100</button>
+          <button class="btn" data-drop="1000">+1k</button>
+          <button class="btn" data-drop="10000">+10k</button>
+          <button class="btn" data-drop="100000">+100k</button>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" id="measureChk" checked><span class="track"></span><span data-i18n="showMeasure"></span></label>
+          <label class="switch"><input type="checkbox" id="soundChk"><span class="track"></span><span data-i18n="sound"></span></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>
+          <span><button class="tab on" data-tab="conv" data-i18n="tabConv"></button><button class="tab" data-tab="err" data-i18n="tabErr"></button><button class="tab" data-tab="hist" data-i18n="tabHist"></button></span>
+          <span class="histbtns"><span>500×</span><button data-hist="100">100</button><button data-hist="1000">1k</button><button data-hist="10000">10k</button></span>
+        </h3>
+        <canvas class="chart" id="chart"></canvas>
+        <div class="chart-note" id="chartNote"></div>
+      </div>
+
+      <div class="kbd" data-i18n-html="keys"></div>
+    </aside>
+  </main>
+</div>
+
+<div id="modal">
+  <div class="card">
+    <button class="btn icon close" id="btnClose">✕</button>
+    <div id="theoryBody"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// Language shown on start ('cs' or 'en'); visitors can switch with the button or L key.
+const DEFAULT_LANG = 'cs';
+const PI = Math.PI;
+const PI_DIGITS = '3.14159265358979';
+const P_IN = PI / 4;                 // probability that a uniform point in the square lands in the circle
+const $ = id => document.getElementById(id);
+
+/* ======================================================================
+   Texts
+   ====================================================================== */
+const I18N = {
+  cs: {
+    title: 'Monte Carlo: π z náhodných bodů',
+    subtitle: 'Házíme náhodné body do čtverce – podíl bodů v kruhu prozradí π',
+    theoryBtn: 'Jak to funguje?',
+    fullscreen: 'Celá obrazovka (F)',
+    legendHit: 'v kruhu',
+    legendMiss: 'mimo kruh',
+    hint: 'Klikni na terč nebo stiskni ▶ Start',
+    hintSmall: 'každé kliknutí = jeden náhodný bod',
+    estimate: 'Odhad π',
+    points: 'Bodů N',
+    inside: 'V kruhu K',
+    theory: 'Teorie π/4',
+    generator: 'Generátor bodů',
+    genRandom: 'Náhodné', genHalton: 'Halton', genLcg: 'Špatné LCG',
+    genNotes: {
+      random: 'Pseudonáhodný generátor prohlížeče. Chyba klesá jako 1/√N.',
+      halton: 'Kvazináhodná posloupnost: body vyplňují čtverec rovnoměrně. Chyba klesá zhruba jako N^(−3/4) – výrazně rychleji než 1/√N.',
+      lcg: 'xₙ₊₁ = (5·xₙ + 1) mod 2048. Perioda jen 2048 – body leží na přímkách a odhad uvízne na 3,207.',
+    },
+    speed: 'Rychlost',
+    perSec: n => n === 1 ? 'bod/s' : n >= 2 && n <= 4 ? 'body/s' : 'bodů/s',
+    start: '▶ Start', pause: '❚❚ Pauza', reset: '↺ Znovu',
+    showMeasure: 'Ukázat x, y posledního bodu',
+    sound: 'Zvuk',
+    tabConv: 'Vývoj', tabErr: 'Chyba', tabHist: 'Opakování',
+    band: 'pás ±2σ',
+    notes: {
+      conv: 'Pás ±2σ ukazuje, kde se odhad z náhodných bodů pohybuje v 95 % případů. Zkus i Halton a špatné LCG.',
+      err: 'Chyba |π̂ − π| v log–log měřítku. Náhodné body: ~1/√N (sklon −½). Halton: ~N^(−3/4), tedy výrazně rychleji.',
+      hist: '500 nezávislých pokusů po N bodech. Víc bodů → užší zvon. Čárkovaně teorie, v závorce σ pro náhodné body.',
+    },
+    histEmpty: 'Zvol N vpravo nahoře ↗',
+    insideV: 'v kruhu ✓', outsideV: 'mimo kruh ✗',
+    err: 'odchylka',
+    digits: n => n <= 0 ? 'zatím žádné správné desetinné místo' :
+                 n === 1 ? '1 správné desetinné místo' :
+                 n < 5 ? `${n} správná desetinná místa` : `${n} správných desetinných míst`,
+    square: 'Čtverec', circle: 'Kruh', area: 'plocha',
+    keys: '<kbd>Mezerník</kbd> start/pauza · <kbd>N</kbd> jeden bod · <kbd>R</kbd> znovu · <kbd>G</kbd> generátor · <kbd>F</kbd> celá obrazovka · <kbd>L</kbd> jazyk · <kbd>S</kbd> zvuk',
+    theoryHtml: `
+      <h2>Metoda Monte Carlo</h2>
+      <p>Házíme náhodné body do čtverce ⟨−1, 1⟩ × ⟨−1, 1⟩, do kterého je vepsaný kruh o poloměru 1.
+      Body padají rovnoměrně, takže pravděpodobnost, že bod padne do kruhu, je rovna poměru ploch:</p>
+      <div class="eq">P = plocha kruhu / plocha čtverce = π·1² / 2² = π / 4</div>
+      <p>Bod (x, y) leží v kruhu právě tehdy, když <b>x² + y² ≤ 1</b> – to je Pythagorova věta pro vzdálenost od středu.
+      Hodíme-li <i>N</i> bodů a <i>K</i> z nich padne do kruhu, je K/N ≈ π/4, a tedy</p>
+      <div class="eq">π ≈ 4 · K / N</div>
+      <h4>Proč „Monte Carlo“?</h4>
+      <p>Metodu rozpracovali Stanisław Ulam a John von Neumann kolem roku 1946 při výpočtech pro projekt Manhattan
+      a pojmenovali ji podle kasina v Monaku, kde také vládne náhoda. Ulama k ní prý přivedlo, když se snažil
+      spočítat šanci, že mu vyjde pasiáns. Dnes se používá ve fyzice, financích, počítačové grafice (ray tracing) i v umělé inteligenci.</p>
+      <h4>Jak přesné to je?</h4>
+      <p>Směrodatná odchylka odhadu je 4·√(p(1−p)/N) ≈ 1,64/√N, kde p = π/4. Na každou další správnou číslici
+      tedy potřebujeme zhruba 100× víc bodů. Pro srovnání: Buffonova jehla s l = t má ≈ 2,37/√N, takže body ve čtverci jsou o něco přesnější.
+      A hlavně: chyba ~1/√N nezávisí na počtu rozměrů. Proto Monte Carlo vítězí u integrálů ve stovkách dimenzí,
+      kde by klasické metody potřebovaly astronomický počet výpočtů.</p>
+      <h4>Generátory bodů</h4>
+      <ul>
+        <li><b>Náhodné</b> – pseudonáhodný generátor prohlížeče (Math.random). Počítač neumí skutečnou náhodu,
+        ale dobrý generátor se od ní nedá rozeznat.</li>
+        <li><b>Halton</b> – kvazináhodná posloupnost (van der Corputova čísla v bázích 2 a 3). Body nejsou náhodné,
+        ale vyplňují čtverec co nejrovnoměrněji. Chyba tu klesá zhruba jako N<sup>−3/4</sup> místo N<sup>−1/2</sup> – to je metoda <i>kvazi-Monte Carlo</i>.
+        U hladkých funkcí je to dokonce skoro 1/N; ostrá hranice kruhu to trochu brzdí.
+        (Posloupnost je náhodně posunutá, aby byl každý pokus jiný.)</li>
+        <li><b>Špatné LCG</b> – lineární kongruenční generátor x<sub>n+1</sub> = (5·x<sub>n</sub> + 1) mod 2048.
+        Má periodu jen 2048 čísel a dvojice (x, y) leží na pěti přímkách. Odhad uvízne na 3,207 a lepší už nebude,
+        ať hodíme bodů kolik chceme. Takové chyby se v historii opravdu staly: slavný generátor RANDU od IBM
+        (60. léta) vyráběl trojice čísel ležící jen v 15 rovinách.</li>
+      </ul>`
+  },
+  en: {
+    title: 'Monte Carlo: π from random points',
+    subtitle: 'Throw random points into a square – the share landing in the circle reveals π',
+    theoryBtn: 'How does it work?',
+    fullscreen: 'Fullscreen (F)',
+    legendHit: 'inside the circle',
+    legendMiss: 'outside',
+    hint: 'Click the target or press ▶ Start',
+    hintSmall: 'every click = one random point',
+    estimate: 'Estimate of π',
+    points: 'Points N',
+    inside: 'Inside K',
+    theory: 'Theory π/4',
+    generator: 'Point generator',
+    genRandom: 'Random', genHalton: 'Halton', genLcg: 'Bad LCG',
+    genNotes: {
+      random: "The browser's pseudo-random generator. The error shrinks like 1/√N.",
+      halton: 'Quasi-random sequence: points fill the square evenly. The error shrinks roughly like N^(−3/4) – much faster than 1/√N.',
+      lcg: 'xₙ₊₁ = (5·xₙ + 1) mod 2048. Period of only 2048 – points lie on lines and the estimate gets stuck at 3.207.',
+    },
+    speed: 'Speed',
+    perSec: n => n === 1 ? 'point/s' : 'points/s',
+    start: '▶ Start', pause: '❚❚ Pause', reset: '↺ Reset',
+    showMeasure: 'Show x, y of the last point',
+    sound: 'Sound',
+    tabConv: 'Estimate', tabErr: 'Error', tabHist: 'Repeats',
+    band: 'band ±2σ',
+    notes: {
+      conv: 'The ±2σ band shows where the estimate from random points stays 95 % of the time. Try Halton and the bad LCG too.',
+      err: 'Error |π̂ − π| on a log–log scale. Random points: ~1/√N (slope −½). Halton: ~N^(−3/4), i.e. much faster.',
+      hist: '500 independent experiments of N points. More points → narrower bell. Dashed: theory, σ for random points in brackets.',
+    },
+    histEmpty: 'Pick N at the top right ↗',
+    insideV: 'inside ✓', outsideV: 'outside ✗',
+    err: 'error',
+    digits: n => n <= 0 ? 'no correct decimal places yet' :
+                 n === 1 ? '1 correct decimal place' : `${n} correct decimal places`,
+    square: 'Square', circle: 'Circle', area: 'area',
+    keys: '<kbd>Space</kbd> start/pause · <kbd>N</kbd> one point · <kbd>R</kbd> reset · <kbd>G</kbd> generator · <kbd>F</kbd> fullscreen · <kbd>L</kbd> language · <kbd>S</kbd> sound',
+    theoryHtml: `
+      <h2>The Monte Carlo method</h2>
+      <p>We throw random points into the square [−1, 1] × [−1, 1], which contains an inscribed circle of radius 1.
+      The points are uniform, so the probability that a point lands in the circle equals the ratio of the areas:</p>
+      <div class="eq">P = circle area / square area = π·1² / 2² = π / 4</div>
+      <p>A point (x, y) is inside the circle exactly when <b>x² + y² ≤ 1</b> – Pythagoras' theorem for the distance from the centre.
+      Throw <i>N</i> points, count the <i>K</i> inside; then K/N ≈ π/4 and therefore</p>
+      <div class="eq">π ≈ 4 · K / N</div>
+      <h4>Why "Monte Carlo"?</h4>
+      <p>Stanisław Ulam and John von Neumann developed the method around 1946 for calculations in the Manhattan Project
+      and named it after the casino in Monaco, where chance rules too. Ulam reportedly got the idea while trying to work out
+      the odds of winning a game of solitaire. Today it is used in physics, finance, computer graphics (ray tracing) and AI.</p>
+      <h4>How accurate is it?</h4>
+      <p>The standard deviation of the estimate is 4·√(p(1−p)/N) ≈ 1.64/√N with p = π/4, so every extra correct digit
+      needs about 100× more points. For comparison, Buffon's needle with l = t gives ≈ 2.37/√N, so points in a square are a bit more accurate.
+      Crucially, the ~1/√N error does not depend on the number of dimensions. That is why Monte Carlo wins for integrals
+      in hundreds of dimensions, where classical methods would need an astronomical number of evaluations.</p>
+      <h4>Point generators</h4>
+      <ul>
+        <li><b>Random</b> – the browser's pseudo-random generator (Math.random). Computers can't produce true randomness,
+        but a good generator is indistinguishable from it.</li>
+        <li><b>Halton</b> – a quasi-random sequence (van der Corput numbers in bases 2 and 3). The points aren't random,
+        they fill the square as evenly as possible. The error falls roughly like N<sup>−3/4</sup> instead of N<sup>−1/2</sup> – this is <i>quasi-Monte Carlo</i>.
+        For smooth functions it is almost 1/N; the sharp edge of the circle slows it down a little.
+        (The sequence is randomly shifted so every run is different.)</li>
+        <li><b>Bad LCG</b> – the linear congruential generator x<sub>n+1</sub> = (5·x<sub>n</sub> + 1) mod 2048.
+        Its period is only 2048 numbers and the (x, y) pairs lie on five lines. The estimate gets stuck at 3.207 and never
+        improves, no matter how many points we throw. Such failures really happened: IBM's infamous RANDU generator (1960s)
+        produced triples of numbers lying in just 15 planes.</li>
+      </ul>`
+  }
+};
+let T = I18N[DEFAULT_LANG];
+
+/* ======================================================================
+   Point generators – each returns a function producing [x, y] in [−1, 1]²
+   ====================================================================== */
+function halton(i, b) {
+  let f = 1, r = 0;
+  while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); }
+  return r;
+}
+const frac = v => v - Math.floor(v);
+
+function makeGen(kind) {
+  if (kind === 'halton') {
+    // Cranley–Patterson rotation: a random shift keeps the even spread but makes each run different.
+    let i = 0;
+    const u = Math.random(), v = Math.random();
+    return () => { i++; return [frac(halton(i, 2) + u) * 2 - 1, frac(halton(i, 3) + v) * 2 - 1]; };
+  }
+  if (kind === 'lcg') {
+    // A deliberately bad generator: tiny modulus, small multiplier.
+    const m = 2048, a = 5;
+    let s = Math.floor(Math.random() * m);
+    return () => {
+      s = (a * s + 1) % m; const x = s / m;
+      s = (a * s + 1) % m; const y = s / m;
+      return [x * 2 - 1, y * 2 - 1];
+    };
+  }
+  return () => [Math.random() * 2 - 1, Math.random() * 2 - 1];
+}
+
+/* ======================================================================
+   State
+   ====================================================================== */
+const HIT  = { rgb: '255,79,163' };
+const MISS = { rgb: '64,210,255' };
+const RING_MAX = 150000;             // settled points kept for redrawing after a resize
+
+const S = {
+  lang: DEFAULT_LANG,
+  gen: 'random', next: null,
+  N: 0, K: 0,
+  running: false, rate: 10, spawnAcc: 0,
+  pending: 0,                        // points queued by the big +N buttons, dropped over several frames
+  history: [], lastHistN: 0,
+  flying: [], effects: [], pulse: 0,
+  last: null, lastT: 0, showMeasure: true,
+  bestDigits: 0,
+  statsDirty: true, lastStats: 0,
+};
+const ring = {
+  x: new Float32Array(RING_MAX), y: new Float32Array(RING_MAX), r: new Float32Array(RING_MAX),
+  a: new Float32Array(RING_MAX), inside: new Uint8Array(RING_MAX), start: 0, len: 0,
+};
+const G = { dpr: 1, cw: 1, ch: 1, size: 1, ox: 0, oy: 0 };   // stage geometry in device pixels
+
+const stage = $('stage'), cv = $('board'), ctx = cv.getContext('2d');
+const mk = () => { const c = document.createElement('canvas'); return [c, c.getContext('2d')]; };
+const [bg, bgx] = mk();              // board, circle, axes
+const [acc, accx] = mk();            // settled points
+const chCv = $('chart'), chx = chCv.getContext('2d');
+
+/* ======================================================================
+   Helpers
+   ====================================================================== */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const locale = () => S.lang === 'cs' ? 'cs-CZ' : 'en-US';
+const dec = (v, d) => v.toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+const int = v => v.toLocaleString(locale());
+const sep = () => S.lang === 'cs' ? ',' : '.';
+const estimate = () => S.N ? 4 * S.K / S.N : NaN;
+const sigmaFor = N => 4 * Math.sqrt(P_IN * (1 - P_IN) / N);
+const font = (px, w = 600) => `${w} ${px * G.dpr}px "Inter", "Segoe UI", system-ui, -apple-system, sans-serif`;
+const X = x => G.ox + (x + 1) / 2 * G.size;
+const Y = y => G.oy + (1 - y) / 2 * G.size;
+
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function pill(c, text, x, y, color, align = 'center') {
+  const d = G.dpr;
+  c.font = font(12.5);
+  const w = c.measureText(text).width + 14 * d, h = 22 * d;
+  let bx = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  bx = clamp(bx, 4 * d, G.cw - w - 4 * d);
+  const by = clamp(y - h / 2, 4 * d, G.ch - h - 4 * d);
+  c.fillStyle = 'rgba(6, 9, 24, 0.85)';
+  rr(c, bx, by, w, h, 7 * d); c.fill();
+  c.strokeStyle = color; c.globalAlpha *= 0.6; c.lineWidth = 1 * d; c.stroke(); c.globalAlpha /= 0.6;
+  c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.fillText(text, bx + 7 * d, by + h / 2 + 0.5 * d);
+}
+
+/* ======================================================================
+   Board
+   ====================================================================== */
+function layoutStage() {
+  const r = stage.getBoundingClientRect();
+  G.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  G.cw = Math.max(1, Math.round(r.width * G.dpr));
+  G.ch = Math.max(1, Math.round(r.height * G.dpr));
+  for (const c of [cv, bg, acc]) { c.width = G.cw; c.height = G.ch; }
+  accClipped = false;                // resizing a canvas resets its state
+  const d = G.dpr, mx = 60 * d, mt = 54 * d, mb = 62 * d;
+  G.size = Math.max(10, Math.min(G.cw - 2 * mx, G.ch - mt - mb));
+  G.ox = (G.cw - G.size) / 2;
+  G.oy = mt + (G.ch - mt - mb - G.size) / 2;
+  drawBoardBg();
+  redrawAccum();
+}
+
+function drawBoardBg() {
+  const c = bgx, d = G.dpr, s = G.size, x0 = G.ox, y0 = G.oy, r = 10 * d;
+  c.clearRect(0, 0, G.cw, G.ch);
+
+  c.save();
+  c.shadowColor = 'rgba(110, 120, 255, 0.35)'; c.shadowBlur = 60 * d;
+  const g = c.createLinearGradient(x0, y0, x0 + s, y0 + s);
+  g.addColorStop(0, '#121a3d'); g.addColorStop(1, '#0b1029');
+  c.fillStyle = g; rr(c, x0, y0, s, s, r); c.fill();
+  c.restore();
+
+  c.save();
+  rr(c, x0, y0, s, s, r); c.clip();
+  // inside of the circle, softly lit
+  const cg = c.createRadialGradient(X(0), Y(0), 0, X(0), Y(0), s / 2);
+  cg.addColorStop(0, 'rgba(255, 79, 163, 0.07)'); cg.addColorStop(1, 'rgba(123, 92, 255, 0.05)');
+  c.fillStyle = cg; c.beginPath(); c.arc(X(0), Y(0), s / 2, 0, 2 * PI); c.fill();
+  // grid every 0.25
+  c.strokeStyle = 'rgba(150, 170, 255, 0.06)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  for (let v = -0.75; v < 1; v += 0.25) { c.moveTo(X(v), y0); c.lineTo(X(v), y0 + s); c.moveTo(x0, Y(v)); c.lineTo(x0 + s, Y(v)); }
+  c.stroke();
+  // axes
+  c.strokeStyle = 'rgba(170, 185, 255, 0.25)';
+  c.beginPath(); c.moveTo(X(-1), Y(0)); c.lineTo(X(1), Y(0)); c.moveTo(X(0), Y(-1)); c.lineTo(X(0), Y(1)); c.stroke();
+  // grain
+  const grains = Math.min(12000, (s * s) / (700 * d * d));
+  for (let i = 0; i < grains; i++) {
+    c.fillStyle = `rgba(200, 210, 255, ${Math.random() * 0.05})`;
+    c.fillRect(x0 + Math.random() * s, y0 + Math.random() * s, d, d);
+  }
+  // radius marker (visible until the points cover it)
+  const ang = PI / 6;
+  c.setLineDash([5 * d, 5 * d]); c.strokeStyle = 'rgba(255, 209, 102, 0.6)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(X(0), Y(0)); c.lineTo(X(Math.cos(ang)), Y(Math.sin(ang))); c.stroke(); c.setLineDash([]);
+  c.font = font(13, 700); c.fillStyle = 'rgba(255, 209, 102, 0.85)'; c.textAlign = 'center'; c.textBaseline = 'bottom';
+  c.fillText('r = 1', X(Math.cos(ang) * 0.55), Y(Math.sin(ang) * 0.55) - 6 * d);
+  c.restore();
+
+  c.strokeStyle = 'rgba(160, 170, 255, 0.28)'; c.lineWidth = 1 * d;
+  rr(c, x0, y0, s, s, r); c.stroke();
+
+  // the circle
+  c.beginPath(); c.arc(X(0), Y(0), s / 2, 0, 2 * PI);
+  c.strokeStyle = 'rgba(185, 160, 255, 0.2)'; c.lineWidth = 9 * d; c.stroke();
+  c.strokeStyle = 'rgba(228, 218, 255, 0.92)'; c.lineWidth = 1.7 * d; c.stroke();
+
+  // tick labels
+  c.font = font(12, 600); c.fillStyle = '#9aa3d4';
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, X(v), y0 + s + 8 * d));
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, x0 - 10 * d, Y(v)));
+  c.font = font(14, 700); c.fillStyle = '#d7d2ff';
+  c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText('x', x0 + s + 8 * d, y0 + s + 6 * d);
+  c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillText('y', x0 - 10 * d, y0 - 6 * d);
+}
+
+// Clears the point layer and clips it to the square.
+let accClipped = false;
+function resetAccum() {
+  if (accClipped) accx.restore();
+  accx.clearRect(0, 0, G.cw, G.ch);
+  accx.save();
+  rr(accx, G.ox, G.oy, G.size, G.size, 10 * G.dpr);
+  accx.clip();
+  accClipped = true;
+}
+
+function redrawAccum() {
+  resetAccum();
+  for (let i = 0; i < ring.len; i++) {
+    const j = (ring.start + i) % RING_MAX;
+    drawPoint(accx, ring.x[j], ring.y[j], ring.inside[j], ring.r[j], ring.a[j]);
+  }
+}
+
+// Point size and brightness shrink as the board fills up, so dense regions stay readable.
+const radFor = N => clamp(5 * Math.pow(100 / (N + 100), 0.3), 1.0, 5);
+const alphaFor = N => clamp(Math.pow(1500 / (N + 1500), 0.25), 0.35, 1);
+
+function drawPoint(c, x, y, inside, r, a) {
+  const d = G.dpr, px = X(x), py = Y(y), R = r * d, col = inside ? HIT : MISS;
+  c.fillStyle = `rgb(${col.rgb})`;
+  if (r >= 2) {
+    c.globalAlpha = a * 0.16;
+    c.beginPath(); c.arc(px, py, R * 2.6, 0, 2 * PI); c.fill();
+    c.globalAlpha = a;
+    c.beginPath(); c.arc(px, py, R, 0, 2 * PI); c.fill();
+    c.globalAlpha = a * 0.7; c.fillStyle = '#ffffff';
+    c.beginPath(); c.arc(px, py, R * 0.42, 0, 2 * PI); c.fill();
+  } else {
+    c.globalAlpha = a;
+    c.fillRect(px - R, py - R, 2 * R, 2 * R);
+  }
+  c.globalAlpha = 1;
+}
+
+/* ======================================================================
+   Throwing points
+   ====================================================================== */
+function samplePoint() {
+  const [x, y] = S.next();
+  return { x, y, inside: x * x + y * y <= 1 };
+}
+
+const durFor = rate => 900 / (1 + rate / 8) + 200;
+
+function launch(p, delay, dur, from) {
+  p.t0 = performance.now() + delay;
+  p.dur = dur;
+  p.sx = from ? from.x : p.x; p.sy = from ? from.y : p.y;
+  S.flying.push(p);
+}
+
+function dropAnimated(count, from) {
+  const stagger = count <= 10 ? 70 : 9;
+  const dur = count === 1 ? 900 : 650;
+  for (let i = 0; i < count; i++) launch(samplePoint(), i * stagger, dur, i === 0 ? from : null);
+}
+
+function dropInstant(count) {
+  for (let i = 0; i < count; i++) commit(samplePoint(), false);
+}
+
+function drop(count) {
+  if (count <= 100) dropAnimated(count);
+  else S.pending += count;
+}
+
+function commit(p, animated) {
+  S.N++;
+  if (p.inside) S.K++;
+  const r = radFor(S.N), a = alphaFor(S.N);
+  drawPoint(accx, p.x, p.y, p.inside, r, a);
+  let j;
+  if (ring.len < RING_MAX) j = (ring.start + ring.len++) % RING_MAX;
+  else { j = ring.start; ring.start = (ring.start + 1) % RING_MAX; }
+  ring.x[j] = p.x; ring.y[j] = p.y; ring.r[j] = r; ring.a[j] = a; ring.inside[j] = p.inside ? 1 : 0;
+  pushHistory();
+  S.last = p; S.lastT = performance.now();
+  if (animated) {
+    spawnEffect(p); playLand(p.inside);
+    if (p.inside) S.pulse = 1;
+  }
+  S.statsDirty = true;
+}
+
+function pushHistory() {
+  if (S.N <= 300 || S.N >= S.lastHistN * 1.01) {
+    S.history.push([S.N, estimate()]);
+    S.lastHistN = S.N;
+  }
+}
+
+/* ======================================================================
+   Sound – synthesised with Web Audio, no files needed
+   ====================================================================== */
+const Snd = { ctx: null, on: false, last: 0 };
+const PENTATONIC = [0, 2, 4, 7, 9, 12, 14];
+
+function enableSound(on) {
+  Snd.on = on;
+  if (!on) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!Snd.ctx && AC) Snd.ctx = new AC();
+  if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume();
+}
+
+function tone(ac, freq, type, peak, decay, when) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(peak, when + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+  o.connect(g).connect(ac.destination);
+  o.start(when); o.stop(when + decay + 0.02);
+}
+
+function playLand(inside) {
+  const ac = Snd.ctx;
+  if (!Snd.on || !ac) return;
+  const now = ac.currentTime;
+  if (now - Snd.last < 0.045) return;      // at high speed don't turn into noise
+  Snd.last = now;
+  if (inside) {                            // small glass bell on a pentatonic scale
+    // kept quiet: the ear is far more sensitive to these high notes than to the low tick
+    const f = 660 * Math.pow(2, PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)] / 12);
+    tone(ac, f, 'sine', 0.05, 0.55, now);
+    tone(ac, f * 2.76, 'sine', 0.01, 0.2, now);
+  } else {                                 // soft wooden tick
+    tone(ac, 190 + Math.random() * 40, 'triangle', 0.07, 0.09, now);
+  }
+}
+
+/* ======================================================================
+   Effects, flying points, measurement
+   ====================================================================== */
+function spawnEffect(p) {
+  if (S.effects.length > 80) return;
+  S.effects.push({ x: p.x, y: p.y, t0: performance.now(), inside: p.inside });
+}
+
+function drawEffects(c, now) {
+  const d = G.dpr;
+  c.save();
+  c.globalCompositeOperation = 'lighter';
+  S.effects = S.effects.filter(e => {
+    const life = e.inside ? 850 : 550;
+    const a = Math.max(0, (now - e.t0) / life);   // clicks can commit after this frame's timestamp
+    if (a >= 1) return false;
+    const px = X(e.x), py = Y(e.y), ease = 1 - Math.pow(1 - a, 3);
+    if (e.inside) {
+      const R = 30 * d;
+      const rg = c.createRadialGradient(px, py, 0, px, py, R);
+      rg.addColorStop(0, `rgba(255,255,255,${0.9 * (1 - a)})`);
+      rg.addColorStop(0.3, `rgba(255,79,163,${0.6 * (1 - a)})`);
+      rg.addColorStop(1, 'rgba(255,79,163,0)');
+      c.fillStyle = rg; c.beginPath(); c.arc(px, py, R, 0, 2 * PI); c.fill();
+      c.strokeStyle = `rgba(255,120,190,${1 - a})`; c.lineWidth = 2 * d;
+      c.beginPath(); c.arc(px, py, (5 + 38 * ease) * d, 0, 2 * PI); c.stroke();
+    } else {
+      c.strokeStyle = `rgba(64,210,255,${0.7 * (1 - a)})`; c.lineWidth = 1.6 * d;
+      c.beginPath(); c.arc(px, py, (4 + 22 * ease) * d, 0, 2 * PI); c.stroke();
+    }
+    return true;
+  });
+  c.restore();
+}
+
+function drawFlying(c, p, t) {
+  const d = G.dpr, e = 1 - Math.pow(1 - t, 3);
+  const x = p.sx + (p.x - p.sx) * e, y = p.sy + (p.y - p.sy) * e;
+  const px = X(x), py = Y(y), fade = clamp(t * 4, 0, 1);
+  // homing ring closing in on the target
+  c.globalAlpha = fade * 0.85;
+  c.strokeStyle = '#ffffff'; c.lineWidth = 1.5 * d;
+  c.beginPath(); c.arc(X(p.x), Y(p.y), (3 + 34 * (1 - e)) * d, 0, 2 * PI); c.stroke();
+  if (p.sx !== p.x || p.sy !== p.y) {
+    c.globalAlpha = fade * 0.25;
+    c.beginPath(); c.moveTo(X(p.sx), Y(p.sy)); c.lineTo(px, py); c.stroke();
+  }
+  // the point itself
+  c.globalAlpha = fade * 0.3; c.fillStyle = '#dfe6ff';
+  c.beginPath(); c.arc(px, py, 7 * d, 0, 2 * PI); c.fill();
+  c.globalAlpha = fade; c.fillStyle = '#ffffff';
+  c.beginPath(); c.arc(px, py, 2.6 * d, 0, 2 * PI); c.fill();
+  c.globalAlpha = 1;
+}
+
+function drawMeasure(c, p, alpha) {
+  const d = G.dpr, X0 = X(0), Y0 = Y(0), px = X(p.x), py = Y(p.y);
+  const col = p.inside ? HIT : MISS, colS = `rgb(${col.rgb})`;
+  const outlined = (w, color, path) => {
+    path(); c.strokeStyle = 'rgba(5,8,20,0.8)'; c.lineWidth = w + 3 * d; c.stroke();
+    c.strokeStyle = color; c.lineWidth = w; c.stroke();
+  };
+  c.save();
+  c.globalAlpha = alpha; c.lineCap = 'round';
+
+  // projections onto the axes
+  c.setLineDash([4 * d, 4 * d]);
+  outlined(1.2 * d, 'rgba(255,255,255,0.75)', () => {
+    c.beginPath(); c.moveTo(px, py); c.lineTo(px, Y0); c.moveTo(px, py); c.lineTo(X0, py);
+  });
+  c.setLineDash([]);
+  // x and y as segments along the axes
+  outlined(3 * d, '#ffd166', () => { c.beginPath(); c.moveTo(X0, Y0); c.lineTo(px, Y0); c.moveTo(X0, Y0); c.lineTo(X0, py); });
+  // distance from the centre
+  outlined(2.6 * d, colS, () => { c.beginPath(); c.moveTo(X0, Y0); c.lineTo(px, py); });
+
+  // the point
+  c.fillStyle = colS; c.shadowColor = colS; c.shadowBlur = 14 * d;
+  c.beginPath(); c.arc(px, py, 5 * d, 0, 2 * PI); c.fill();
+  c.shadowBlur = 0;
+  c.strokeStyle = '#fff'; c.lineWidth = 1.5 * d;
+  c.beginPath(); c.arc(px, py, 10 * d, 0, 2 * PI); c.stroke();
+  c.fillStyle = '#ffd166'; c.beginPath(); c.arc(X0, Y0, 3.5 * d, 0, 2 * PI); c.fill();
+
+  // labels
+  const r2 = p.x * p.x + p.y * p.y;
+  pill(c, `x = ${dec(p.x, 2)}`, (X0 + px) / 2, Y0 + (p.y >= 0 ? 16 : -16) * d, '#ffd166');
+  pill(c, `y = ${dec(p.y, 2)}`, X0 + (p.x >= 0 ? -10 : 10) * d, (Y0 + py) / 2, '#ffd166', p.x >= 0 ? 'right' : 'left');
+  const len = Math.hypot(px - X0, py - Y0) || 1;
+  const nx = -(py - Y0) / len, ny = (px - X0) / len;             // normal to the radius line
+  pill(c, `r = ${dec(Math.sqrt(r2), 2)}`, (X0 + px) / 2 + nx * 18 * d, (Y0 + py) / 2 + ny * 18 * d, colS);
+  const ux = len > 1 ? (px - X0) / len : 0, uy = len > 1 ? (py - Y0) / len : -1;
+  pill(c, `x² + y² = ${dec(r2, 2)} ${p.inside ? '≤' : '>'} 1  ⇒  ${p.inside ? T.insideV : T.outsideV}`,
+       px + ux * 44 * d, py + uy * 30 * d, colS);
+  c.restore();
+}
+
+/* ======================================================================
+   Charts: convergence, log–log error, repeated experiments
+   ====================================================================== */
+const CH = { tab: 'conv', data: {}, dirty: false };
+const REP_RUNS = 500, REP_BINS = 90, REP_SIZES = [100, 1000, 10000];
+const REP_COLORS = { 100: '64,210,255', 1000: '176,150,255', 10000: '255,79,163' };
+
+function currentPoints() {
+  const pts = S.history.slice();
+  if (S.N && (!pts.length || pts[pts.length - 1][0] !== S.N)) pts.push([S.N, estimate()]);
+  return pts;
+}
+
+function frame2d(c, w, h, pl, pr, pt, pb) {
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(255,255,255,0.02)'; c.fillRect(pl, pt, w - pl - pr, h - pt - pb);
+}
+
+function drawConv() {
+  const c = chx, d = G.dpr, w = chCv.width, h = chCv.height;
+  const pl = 48 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d;
+  frame2d(c, w, h, pl, pr, pt, pb);
+  const Nmax = Math.max(100, S.N * 1.05), LX = Math.log10(Nmax);
+  const Xn = n => pl + Math.log10(n) / LX * (w - pl - pr);
+  const pts = currentPoints();
+  let dev = 0.03;
+  const from = Math.sqrt(Math.max(1, S.N));
+  for (const [n, e] of pts) if (n >= from) dev = Math.max(dev, Math.abs(e - PI));
+  const yr = Math.min(1.6, dev * 1.25);
+  const Ye = e => pt + (1 - (e - (PI - yr)) / (2 * yr)) * (h - pt - pb);
+
+  c.save();
+  c.beginPath(); c.rect(pl, pt, w - pl - pr, h - pt - pb); c.clip();
+  const up = [], lo = [];
+  for (let i = 0; i <= 80; i++) {
+    const n = Math.pow(10, i / 80 * LX), sig = sigmaFor(n);
+    up.push([Xn(n), Ye(PI + 2 * sig)]); lo.push([Xn(n), Ye(PI - 2 * sig)]);
+  }
+  c.beginPath();
+  up.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+  for (let i = lo.length - 1; i >= 0; i--) c.lineTo(lo[i][0], lo[i][1]);
+  c.closePath(); c.fillStyle = 'rgba(123,92,255,0.16)'; c.fill();
+  c.font = font(10.5, 600); c.fillStyle = 'rgba(185,170,255,0.8)'; c.textAlign = 'right'; c.textBaseline = 'top';
+  c.fillText(T.band, w - pr - 5 * d, pt + 4 * d);
+
+  c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  for (let k = 1; k <= Math.floor(LX); k++) { c.moveTo(Xn(10 ** k), pt); c.lineTo(Xn(10 ** k), h - pb); }
+  c.stroke();
+  c.setLineDash([6 * d, 5 * d]); c.strokeStyle = 'rgba(255,209,102,0.85)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(pl, Ye(PI)); c.lineTo(w - pr, Ye(PI)); c.stroke(); c.setLineDash([]);
+  if (pts.length) {
+    c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach(([n, e], i) => i ? c.lineTo(Xn(n), Ye(e)) : c.moveTo(Xn(n), Ye(e)));
+    c.strokeStyle = 'rgba(255,79,163,0.35)'; c.lineWidth = 5 * d; c.stroke();
+    c.strokeStyle = '#ffe0ef'; c.lineWidth = 1.6 * d; c.stroke();
+    const [ln, le] = pts[pts.length - 1];
+    c.fillStyle = '#fff'; c.shadowColor = '#ff4fa3'; c.shadowBlur = 12 * d;
+    c.beginPath(); c.arc(Xn(ln), Ye(le), 3.5 * d, 0, 2 * PI); c.fill(); c.shadowBlur = 0;
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d; c.strokeRect(pl, pt, w - pl - pr, h - pt - pb);
+  c.font = font(11, 500); c.fillStyle = '#8e98c7'; c.textAlign = 'center'; c.textBaseline = 'top';
+  const names = ['1', '10', '100', '1k', '10k', '100k', '1M', '10M', '100M'];
+  for (let k = 0; k <= Math.floor(LX) && k < names.length; k++) c.fillText(names[k], Xn(10 ** k), h - pb + 5 * d);
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  const dd = yr < 0.05 ? 3 : 2;
+  c.fillText(dec(PI + yr, dd), pl - 6 * d, pt + 6 * d);
+  c.fillText(dec(PI - yr, dd), pl - 6 * d, h - pb - 6 * d);
+  c.fillStyle = '#ffd166'; c.font = font(12, 700); c.fillText('π', pl - 6 * d, Ye(PI));
+}
+
+function drawErr() {
+  const c = chx, d = G.dpr, w = chCv.width, h = chCv.height;
+  const pl = 48 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d;
+  frame2d(c, w, h, pl, pr, pt, pb);
+  const Nmax = Math.max(100, S.N * 1.05), LX = Math.log10(Nmax);
+  const Emin = -5, Emax = 0.5;
+  const Xn = n => pl + Math.log10(n) / LX * (w - pl - pr);
+  const Ye = err => pt + (Emax - Math.log10(Math.max(err, 10 ** Emin))) / (Emax - Emin) * (h - pt - pb);
+
+  c.save();
+  c.beginPath(); c.rect(pl, pt, w - pl - pr, h - pt - pb); c.clip();
+  c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  for (let k = 1; k <= Math.floor(LX); k++) { c.moveTo(Xn(10 ** k), pt); c.lineTo(Xn(10 ** k), h - pb); }
+  for (let k = Emin; k <= 0; k++) { c.moveTo(pl, Ye(10 ** k)); c.lineTo(w - pr, Ye(10 ** k)); }
+  c.stroke();
+  // reference slopes
+  const s1 = sigmaFor(1);
+  const ref = (f, color, dash, label, labelN) => {
+    c.setLineDash(dash); c.strokeStyle = color; c.lineWidth = 1.6 * d;
+    c.beginPath(); c.moveTo(Xn(1), Ye(f(1))); c.lineTo(Xn(Nmax), Ye(f(Nmax))); c.stroke(); c.setLineDash([]);
+    c.font = font(10.5, 700); c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'bottom';
+    c.fillText(label, Xn(labelN) + 4 * d, Ye(f(labelN)) - 3 * d);
+  };
+  ref(n => s1 / Math.sqrt(n), 'rgba(185,170,255,0.9)', [], '~1/√N', Math.pow(Nmax, 0.62));
+  // quasi-random points and a region with a sharp edge (the circle): error ~ N^(−3/4)
+  ref(n => s1 / Math.pow(n, 0.75), 'rgba(64,210,255,0.8)', [5 * d, 4 * d], '~N^(−3/4)', Math.pow(Nmax, 0.3));
+  // measured error
+  const pts = currentPoints();
+  if (pts.length) {
+    c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach(([n, e], i) => i ? c.lineTo(Xn(n), Ye(Math.abs(e - PI))) : c.moveTo(Xn(n), Ye(Math.abs(e - PI))));
+    c.strokeStyle = 'rgba(255,79,163,0.35)'; c.lineWidth = 4 * d; c.stroke();
+    c.strokeStyle = '#ffe0ef'; c.lineWidth = 1.3 * d; c.stroke();
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d; c.strokeRect(pl, pt, w - pl - pr, h - pt - pb);
+  c.font = font(11, 500); c.fillStyle = '#8e98c7'; c.textAlign = 'center'; c.textBaseline = 'top';
+  const names = ['1', '10', '100', '1k', '10k', '100k', '1M', '10M', '100M'];
+  for (let k = 0; k <= Math.floor(LX) && k < names.length; k++) c.fillText(names[k], Xn(10 ** k), h - pb + 5 * d);
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  const ylab = ['10⁻⁵', '10⁻⁴', '10⁻³', '0,01', '0,1', '1'];
+  for (let k = Emin; k <= 0; k++) c.fillText(ylab[k - Emin].replace(',', sep()), pl - 6 * d, Ye(10 ** k));
+}
+
+// Fixed x-range (±4σ of the N = 100 case), so the bells for different N can be compared.
+const repRange = () => 4 * sigmaFor(100);
+
+function erf(x) {                    // Abramowitz–Stegun 7.1.26, |error| < 1.5e-7
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+const Phi = z => 0.5 * (1 + erf(z / Math.SQRT2));
+
+function startRepeat(N) {
+  CH.data[N] = { counts: new Float64Array(REP_BINS), runs: 0, sum: 0, sumSq: 0, gen: S.gen };
+  setTab('hist');
+}
+
+function stepRepeat() {
+  const R = repRange(), lo = PI - R, bw = 2 * R / REP_BINS;
+  let busy = false;
+  for (const N of REP_SIZES) {
+    const h = CH.data[N];
+    if (!h || h.runs >= REP_RUNS) continue;
+    busy = true;
+    const k = Math.min(REP_RUNS - h.runs, Math.ceil(REP_RUNS / 45));   // ~¾ s of animation
+    for (let r = 0; r < k; r++) {
+      const next = makeGen(h.gen);
+      let inside = 0;
+      for (let i = 0; i < N; i++) { const [x, y] = next(); if (x * x + y * y <= 1) inside++; }
+      const e = 4 * inside / N;
+      h.runs++; h.sum += e; h.sumSq += e * e;
+      const b = Math.floor((e - lo) / bw);
+      if (b >= 0 && b < REP_BINS) h.counts[b]++;
+    }
+  }
+  return busy;
+}
+
+// "N=100 σ=0,1568 (0,1642)": measured spread, σ for random points in brackets.
+// The generator is named only when the histograms on screen come from different ones.
+function legendText(N) {
+  const hd = CH.data[N], n = hd.runs;
+  const mean = n ? hd.sum / n : 0;
+  const sd = n > 1 ? Math.sqrt(Math.max(0, (hd.sumSq - n * mean * mean) / (n - 1))) : 0;
+  const prog = n < REP_RUNS ? ` ${n}/${REP_RUNS}` : '';
+  const gens = new Set(REP_SIZES.filter(k => CH.data[k]).map(k => CH.data[k].gen));
+  const gname = gens.size > 1 ? ' ' + { random: T.genRandom, halton: T.genHalton, lcg: T.genLcg }[hd.gen] : '';
+  return `N=${int(N)} σ=${dec(sd, 4)} (${dec(sigmaFor(N), 4)})${gname}${prog}`;
+}
+
+function drawHist() {
+  const c = chx, d = G.dpr, w = chCv.width, h = chCv.height;
+  const pl = 12 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d, pw = w - pl - pr, ph = h - pt - pb;
+  const R = repRange(), lo = PI - R, bw = 2 * R / REP_BINS;
+  const Xe = e => pl + (e - lo) / (2 * R) * pw;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(255,255,255,0.02)'; c.fillRect(pl, pt, pw, ph);
+  const shown = REP_SIZES.filter(N => CH.data[N]);
+
+  // Legend strip at the top (measured σ vs. theory), wrapped into rows; the bars are scaled
+  // to the space below it, so curves and text never overlap.
+  c.font = font(10.5, 600);
+  const gap = 14 * d, rows = [];
+  let row = [], rowW = 0;
+  for (const N of shown) {
+    const it = { N, text: legendText(N) };
+    it.w = c.measureText(it.text).width;
+    if (row.length && rowW + gap + it.w > pw - 10 * d) { rows.push(row); row = []; rowW = 0; }
+    rowW += (row.length ? gap : 0) + it.w;
+    row.push(it);
+  }
+  if (row.length) rows.push(row);
+  const lh = rows.length ? (rows.length * 14 + 6) * d : 0;
+
+  c.save();
+  c.beginPath(); c.rect(pl, pt, pw, ph); c.clip();
+  for (const N of shown) {
+    const hd = CH.data[N], col = REP_COLORS[N], sig = sigmaFor(N);
+    const expected = e => REP_RUNS * (Phi((e + bw / 2 - PI) / sig) - Phi((e - bw / 2 - PI) / sig));
+    // Each bell is scaled to its own peak, so bars grow up towards the dashed theory curve.
+    const top = Math.max(expected(PI), ...hd.counts) * 1.08;
+    const Yv = v => pt + ph - v / top * (ph - lh);
+    c.beginPath(); c.moveTo(Xe(lo), Yv(0));
+    for (let b = 0; b < REP_BINS; b++) { c.lineTo(Xe(lo + b * bw), Yv(hd.counts[b])); c.lineTo(Xe(lo + (b + 1) * bw), Yv(hd.counts[b])); }
+    c.lineTo(Xe(PI + R), Yv(0)); c.closePath();
+    c.fillStyle = `rgba(${col},0.28)`; c.fill();
+    c.strokeStyle = `rgba(${col},0.95)`; c.lineWidth = 1.3 * d; c.stroke();
+    c.beginPath();
+    for (let i = 0; i <= 240; i++) {
+      const e = lo + i / 240 * 2 * R;
+      i ? c.lineTo(Xe(e), Yv(expected(e))) : c.moveTo(Xe(e), Yv(expected(e)));
+    }
+    c.setLineDash([4 * d, 3 * d]); c.strokeStyle = `rgba(${col},0.9)`; c.lineWidth = 1.2 * d; c.stroke(); c.setLineDash([]);
+  }
+  c.setLineDash([6 * d, 5 * d]); c.strokeStyle = 'rgba(255,209,102,0.85)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(Xe(PI), pt + lh); c.lineTo(Xe(PI), pt + ph); c.stroke(); c.setLineDash([]);
+  if (lh) {
+    c.strokeStyle = 'rgba(255,255,255,0.08)'; c.lineWidth = 1 * d;
+    c.beginPath(); c.moveTo(pl, pt + lh - 2 * d); c.lineTo(pl + pw, pt + lh - 2 * d); c.stroke();
+  }
+  c.restore();
+
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d; c.strokeRect(pl, pt, pw, ph);
+  c.font = font(11, 500); c.fillStyle = '#8e98c7'; c.textBaseline = 'top';
+  const dd = R < 0.1 ? 3 : 2;
+  c.textAlign = 'left'; c.fillText(dec(PI - R, dd), pl, pt + ph + 5 * d);
+  c.textAlign = 'right'; c.fillText(dec(PI + R, dd), pl + pw, pt + ph + 5 * d);
+  c.textAlign = 'center'; c.fillStyle = '#ffd166'; c.font = font(12, 700); c.fillText('π', Xe(PI), pt + ph + 4 * d);
+
+  c.textBaseline = 'middle';
+  if (!shown.length) {
+    c.font = font(11.5, 500); c.fillStyle = '#8e98c7'; c.textAlign = 'center';
+    c.fillText(T.histEmpty, pl + pw / 2, pt + ph / 2);
+    return;
+  }
+  c.font = font(10.5, 600); c.textAlign = 'left';
+  rows.forEach((r, i) => {
+    let x = pl + 5 * d;
+    for (const it of r) {
+      c.fillStyle = `rgb(${REP_COLORS[it.N]})`;
+      c.fillText(it.text, x, pt + (9 + i * 14) * d);
+      x += it.w + gap;
+    }
+  });
+}
+
+function drawChart() {
+  if (CH.tab === 'hist') drawHist(); else if (CH.tab === 'err') drawErr(); else drawConv();
+}
+
+function setTab(tab) {
+  CH.tab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('chartNote').textContent = T.notes[tab];
+  drawChart();
+}
+
+function resizeChart() {
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  chCv.width = Math.max(1, Math.round(chCv.clientWidth * d));
+  chCv.height = Math.max(1, Math.round(chCv.clientHeight * d));
+  drawChart();
+}
+
+/* ======================================================================
+   Stats panel
+   ====================================================================== */
+function updateStats() {
+  $('stN').textContent = int(S.N);
+  $('stK').textContent = int(S.K);
+  $('stP').textContent = S.N ? dec(S.K / S.N, 4) : '—';
+  $('stPT').textContent = dec(P_IN, 4);
+  $('piTrue').textContent = `π = ${PI_DIGITS.slice(0, 10).replace('.', sep())}…`;
+
+  const e = estimate();
+  const badge = $('badge');
+  if (!isFinite(e)) {
+    $('piValue').innerHTML = '<span class="no">—</span>';
+    $('piErr').textContent = '';
+    badge.textContent = T.digits(0);
+  } else {
+    const str = e.toFixed(6);
+    let i = 0;
+    while (i < str.length && str[i] === PI_DIGITS[i]) i++;
+    const shown = str.replace('.', sep());
+    $('piValue').innerHTML = `<span class="ok">${shown.slice(0, i)}</span><span class="no">${shown.slice(i)}</span>`;
+    const err = Math.abs(e - PI);
+    $('piErr').textContent = `${T.err} ${dec(err, 5)} (${dec(err / PI * 100, 3)} %)`;
+    const digits = Math.max(0, i - 2);
+    badge.textContent = T.digits(digits);
+    if (digits > S.bestDigits && S.N > 20) {
+      badge.classList.add('pop'); setTimeout(() => badge.classList.remove('pop'), 300);
+    }
+    S.bestDigits = Math.max(S.bestDigits, digits);
+  }
+  // always two lines (formula, then the numbers) so the box never changes height
+  $('formula').innerHTML = 'π ≈ 4 · K / N<br>' + (S.N ? `= 4 · ${int(S.K)} / ${int(S.N)}` : '&nbsp;');
+  $('hint').classList.toggle('hidden', S.N > 0 || S.flying.length > 0);
+  drawChart();
+}
+
+function updateBoardInfo() {
+  const gname = { random: T.genRandom, halton: T.genHalton, lcg: T.genLcg }[S.gen];
+  $('boardInfo').innerHTML =
+    `<span class="chip"><b>${T.square}</b> ⟨−1, 1⟩ × ⟨−1, 1⟩ · ${T.area} <b>4</b></span>` +
+    `<span class="chip"><b>${T.circle}</b> r = 1 · ${T.area} <b>π</b></span>` +
+    `<span class="chip">P = π / 4 ≈ <b>${dec(P_IN, 4)}</b></span>` +
+    `<span class="chip">${T.generator}: <b>${gname}</b></span>`;
+}
+
+/* ======================================================================
+   Reset & main loop
+   ====================================================================== */
+function reset() {
+  S.N = 0; S.K = 0; S.history = []; S.lastHistN = 0; S.pending = 0;
+  S.flying = []; S.effects = []; S.pulse = 0; ring.start = 0; ring.len = 0;
+  S.last = null; S.spawnAcc = 0; S.bestDigits = 0;
+  S.next = makeGen(S.gen);
+  resetAccum();
+  updateBoardInfo();
+  S.statsDirty = true;
+}
+
+function measureVisible() {
+  return S.showMeasure && S.last && (!S.running || S.rate <= 4);
+}
+
+let prev = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - prev) / 1000);
+  prev = now;
+
+  if (S.running) {
+    S.spawnAcc += S.rate * dt;
+    let n = Math.floor(S.spawnAcc);
+    S.spawnAcc -= n;
+    n = Math.min(n, 500);
+    if (S.rate <= 150) {
+      for (let i = 0; i < n; i++) launch(samplePoint(), i * (dt * 1000 / n), durFor(S.rate));
+    } else {
+      dropInstant(n);
+    }
+  }
+
+  // big batches: a few thousand per frame keeps the page responsive
+  if (S.pending) {
+    const n = Math.min(S.pending, 5000);
+    S.pending -= n;
+    dropInstant(n);
+  }
+
+  if (stepRepeat() || CH.dirty) { if (CH.tab === 'hist') drawHist(); CH.dirty = false; }
+
+  if (S.flying.length) {
+    const still = [];
+    for (const p of S.flying) {
+      if (now - p.t0 >= p.dur) commit(p, true); else still.push(p);
+    }
+    S.flying = still;
+  }
+
+  ctx.clearRect(0, 0, G.cw, G.ch);
+  ctx.drawImage(bg, 0, 0);
+  ctx.drawImage(acc, 0, 0);
+  // the circle glows up briefly whenever a point lands inside it
+  if (S.pulse > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,79,163,${0.6 * S.pulse})`; ctx.lineWidth = (2 + 4 * S.pulse) * G.dpr;
+    ctx.beginPath(); ctx.arc(X(0), Y(0), G.size / 2, 0, 2 * PI); ctx.stroke();
+    ctx.restore();
+    S.pulse *= Math.exp(-dt * 5);
+  }
+  drawEffects(ctx, now);
+  if (measureVisible()) drawMeasure(ctx, S.last, clamp((now - S.lastT) / 350, 0, 1));
+  for (const p of S.flying) {
+    const t = (now - p.t0) / p.dur;
+    if (t >= 0) drawFlying(ctx, p, t);
+  }
+
+  if (S.statsDirty && now - S.lastStats > 80) { updateStats(); S.statsDirty = false; S.lastStats = now; }
+  requestAnimationFrame(frame);
+}
+
+/* ======================================================================
+   UI wiring
+   ====================================================================== */
+const rSlider = $('rSlider');
+const RATE_MAX = 5000;
+const rateFromSlider = v => Math.max(1, Math.round(Math.pow(10, v / 1000 * Math.log10(RATE_MAX))));
+const sliderFromRate = r => Math.round(Math.log10(r) / Math.log10(RATE_MAX) * 1000);
+
+function syncControls() {
+  rSlider.value = sliderFromRate(S.rate);
+  rSlider.style.setProperty('--fill', (rSlider.value / 10) + '%');
+  $('rVal').textContent = `${int(S.rate)} ${T.perSec(S.rate)}`;
+  $('btnPlay').textContent = S.running ? T.pause : T.start;
+  $('genNote').textContent = T.genNotes[S.gen];
+  document.querySelectorAll('#genSeg button').forEach(b => b.classList.toggle('on', b.dataset.gen === S.gen));
+}
+
+function setGen(gen) { S.gen = gen; syncControls(); reset(); }
+
+rSlider.addEventListener('input', () => { S.rate = rateFromSlider(+rSlider.value); syncControls(); });
+document.querySelectorAll('#genSeg button').forEach(b => b.addEventListener('click', () => setGen(b.dataset.gen)));
+
+function togglePlay() { S.running = !S.running; syncControls(); }
+$('btnPlay').addEventListener('click', togglePlay);
+$('btnReset').addEventListener('click', reset);
+document.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => drop(+b.dataset.drop)));
+$('measureChk').addEventListener('change', e => { S.showMeasure = e.target.checked; });
+$('soundChk').addEventListener('change', e => enableSound(e.target.checked));
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.querySelectorAll('[data-hist]').forEach(b => b.addEventListener('click', () => startRepeat(+b.dataset.hist)));
+
+// A click throws a random point – it flies from where you clicked, but lands where chance decides.
+cv.addEventListener('pointerdown', e => {
+  const r = cv.getBoundingClientRect();
+  const x = ((e.clientX - r.left) * G.dpr - G.ox) / G.size * 2 - 1;
+  const y = 1 - ((e.clientY - r.top) * G.dpr - G.oy) / G.size * 2;
+  if (Math.abs(x) > 1.05 || Math.abs(y) > 1.05) return;
+  dropAnimated(1, { x, y });
+});
+
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+$('btnFull').addEventListener('click', toggleFull);
+
+function setLang(lang) {
+  S.lang = lang; T = I18N[lang];
+  document.documentElement.lang = lang;
+  document.title = T.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = T[el.dataset.i18n]; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = T[el.dataset.i18nTitle]; });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = T[el.dataset.i18nHtml]; });
+  $('theoryBody').innerHTML = T.theoryHtml;
+  $('btnLang').textContent = lang === 'cs' ? 'EN' : 'CZ';
+  $('chartNote').textContent = T.notes[CH.tab];
+  syncControls();
+  updateBoardInfo();
+  if (G.cw > 1) drawBoardBg();
+  S.statsDirty = true;
+}
+$('btnLang').addEventListener('click', () => setLang(S.lang === 'cs' ? 'en' : 'cs'));
+
+const modal = $('modal');
+$('btnTheory').addEventListener('click', () => modal.classList.add('open'));
+$('btnClose').addEventListener('click', () => modal.classList.remove('open'));
+modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+const GENS = ['random', 'halton', 'lcg'];
+window.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'escape') { modal.classList.remove('open'); return; }
+  if (k === ' ') { e.preventDefault(); togglePlay(); }
+  else if (k === 'n' || k === 'enter') { e.preventDefault(); dropAnimated(1); }
+  else if (k === 'r') reset();
+  else if (k === 'g') setGen(GENS[(GENS.indexOf(S.gen) + 1) % GENS.length]);
+  else if (k === 'f') toggleFull();
+  else if (k === 'l') setLang(S.lang === 'cs' ? 'en' : 'cs');
+  else if (k === 's') { const c = $('soundChk'); c.checked = !c.checked; enableSound(c.checked); }
+});
+
+let resizeQueued = false;
+new ResizeObserver(() => {
+  if (resizeQueued) return;
+  resizeQueued = true;
+  requestAnimationFrame(() => { resizeQueued = false; layoutStage(); resizeChart(); });
+}).observe(stage);
+new ResizeObserver(() => resizeChart()).observe(chCv);
+
+/* ---------- start ---------- */
+setLang(DEFAULT_LANG);
+layoutStage();
+resizeChart();
+reset();
+setTab('conv');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
