@@ -43,14 +43,24 @@ def step():
     else:
         experiment = simulate(batch, needle_length, line_spacing)
 
-    html = render_template(
-        "results.html",
-        result=experiment,
-        needles=needles_image(experiment),
-        phase_space=phase_space_image(experiment),
-        convergence=convergence_image(experiment),
-    )
+    if "no_charts" in request.form:
+        html = render_template("results.html", result=experiment)
+    else:
+        html = render_template(
+            "results.html",
+            result=experiment,
+            needles=needles_image(experiment),
+            phase_space=phase_space_image(experiment),
+            convergence=convergence_image(experiment),
+        )
     return {"html": html, "done": experiment.n >= n}
+
+
+@app.post("/reset")
+def reset():
+    global experiment
+    experiment = None
+    return {}
 
 
 if __name__ == "__main__":

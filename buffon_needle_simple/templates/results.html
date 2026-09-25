@@ -11,6 +11,7 @@
     {% endif %}
 </table>
 
+{% if needles %}
 <div class="plots">
     <div>{{ needles|safe }}</div>
     <div class="side">
@@ -18,3 +19,4 @@
         {{ convergence|safe }}
     </div>
 </div>
+{% endif %}

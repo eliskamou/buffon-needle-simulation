@@ -5,42 +5,62 @@ body {
     padding: 0 16px;
 }
 
+/* formulas */
+var, .math {
+    font-family: serif;
+    font-size: 1.15em;
+    white-space: nowrap;
+    font-weight: normal;
+    padding-right: 0.15em;
+}
+
+.math var {
+    font-size: 1em;
+}
+
+/* form */
 form {
     display: flex;
     flex-wrap: wrap;
     gap: 16px;
-    align-items: flex-end;
 }
 
 label {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    line-height: 24px;
 }
 
-var, .math {
-    font-family: "STIX Two Math", "Cambria Math", "Times New Roman", serif;
-    font-size: 1.15em;
-    padding: 0 0.15em 0 0.05em;  /* italic letters lean right, give them room */
+input, button {
+    font-size: 1em;
+    padding: 4px 8px;
 }
 
-.math {
-    white-space: nowrap;
+/* force it to be the same size as the other parameters */
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 6px 0;
+}
+
+button {
+    align-self: flex-end;
 }
 
 .error {
-    color: #b00020;
-    font-weight: bold;
+    color: red;
 }
 
-table {
-    border-collapse: collapse;
-}
-
+/* results */
 th, td {
     border: 1px solid #ccc;
     padding: 4px 10px;
     text-align: left;
+}
+
+table {
+    border-collapse: collapse;
 }
 
 .plots {
@@ -59,9 +79,4 @@ th, td {
 .plots svg {
     width: 100%;
     height: auto;
-}
-
-input, button {
-    font-size: 1em;
-    padding: 4px 8px;
 }

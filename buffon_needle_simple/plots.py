@@ -67,7 +67,7 @@ def needles_image(result: SimulationResult) -> str:
     ax.set_aspect("equal")
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title(f"Prvních {count} jehel (červeně protínají čáru)")
+    ax.set_title(f"Prvních {count} jehel (červené protínají čáru)")
     return _to_svg(fig)
 
 

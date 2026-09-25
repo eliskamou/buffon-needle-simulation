@@ -18,8 +18,12 @@
     <label><span>Rozteč čar <var>t</var></span>
         <input type="text" name="line_spacing" value="2" required>
     </label>
+    <label><span>Bez grafů</span>
+        <input type="checkbox" name="no_charts">
+    </label>
     <button type="submit">Spustit</button>
     <button type="button" id="stop">Zastavit</button>
+    <button type="button" id="reset">Vyčistit</button>
 </form>
 
 <p class="error" id="error"></p>
@@ -30,6 +34,7 @@
     const results = document.getElementById("results");
     const error = document.getElementById("error");
     let running = false;
+    let currentRun = Promise.resolve();
 
     // While running, ask the server for the next batch of needles
     async function run() {
@@ -54,10 +59,17 @@
     form.addEventListener("submit", event => {
         event.preventDefault();
         if (!running) {
-            run();
+            currentRun = run();
         }
     });
     document.getElementById("stop").addEventListener("click", () => running = false);
+    document.getElementById("reset").addEventListener("click", async () => {
+        running = false;
+        await currentRun;  // let the last /step finish before clearing
+        await fetch("/reset", {method: "POST"});
+        results.innerHTML = "";
+        error.textContent = "";
+    });
 </script>
 </body>
 </html>

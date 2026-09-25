@@ -65,7 +65,6 @@ def validate_parameters(n: int, needle_length: float, line_spacing: float) -> No
 
 
 def simulate(n: int, needle_length: float, line_spacing: float) -> SimulationResult:
-    validate_parameters(n, needle_length, line_spacing)
     rng = np.random.default_rng()
 
     x = rng.uniform(0, line_spacing / 2, n)
@@ -88,10 +87,9 @@ def add_throws(result: SimulationResult, n: int) -> SimulationResult:
 
 
 def running_estimate(result: SimulationResult) -> np.ndarray:
-    """Estimate of pi after 1 to N throws (NaN on start)."""
-    throws = np.arange(1, result.n + 1)
-    cumulative_hits = np.cumsum(result.hits)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        estimate = 2 * result.needle_length * throws / (result.line_spacing * cumulative_hits)
-    estimate[cumulative_hits == 0] = np.nan
-    return estimate
+    """Estimate of pi after each throw: 2 * l * N / (t * H)."""
+    l, t = result.needle_length, result.line_spacing
+    throws = np.arange(1, result.n + 1)  # N after each throw
+    hits_so_far = np.cumsum(result.hits).astype(float)  # H after each throw
+    hits_so_far[hits_so_far == 0] = np.nan  # no hit yet = no estimate, guard against division by zero
+    return 2 * l * throws / (t * hits_so_far)
