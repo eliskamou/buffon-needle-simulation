@@ -1,0 +1,20 @@
+<table>
+    <tr><th>počet hodů <var>N</var></th><td>{{ result.n }}</td></tr>
+    <tr><th>počet zásahů <var>H</var></th><td>{{ result.hit_count }}</td></tr>
+    <tr><th>relativní četnost <span class="math"><var>H</var> / <var>N</var></span></th><td>{{ "%.5f"|format(result.hit_ratio) }}</td></tr>
+    <tr><th>teoretická <span class="math"><var>P</var> = 2<var>l</var> / (π<var>t</var>)</span></th><td>{{ "%.5f"|format(result.theoretical_probability) }}</td></tr>
+    {% if result.pi_estimate is not none %}
+        <tr><th>odhad <span class="math">π = 2<var>lN</var> / (<var>tH</var>)</span></th><td>{{ "%.6f"|format(result.pi_estimate) }}</td></tr>
+        <tr><th>chyba <span class="math">| odhad − π |</span></th><td>{{ "%.6f"|format(result.pi_error) }}</td></tr>
+    {% else %}
+        <tr><th>odhad <span class="math">π</span></th><td>nelze určit (<var>H</var> = 0)</td></tr>
+    {% endif %}
+</table>
+
+<div class="plots">
+    <div>{{ needles|safe }}</div>
+    <div class="side">
+        {{ phase_space|safe }}
+        {{ convergence|safe }}
+    </div>
+</div>

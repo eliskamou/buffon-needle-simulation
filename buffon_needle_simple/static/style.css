@@ -1,0 +1,67 @@
+body {
+    font-family: sans-serif;
+    max-width: 1400px;
+    margin: 20px auto;
+    padding: 0 16px;
+}
+
+form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+var, .math {
+    font-family: "STIX Two Math", "Cambria Math", "Times New Roman", serif;
+    font-size: 1.15em;
+    padding: 0 0.15em 0 0.05em;  /* italic letters lean right, give them room */
+}
+
+.math {
+    white-space: nowrap;
+}
+
+.error {
+    color: #b00020;
+    font-weight: bold;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+    text-align: left;
+}
+
+.plots {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.plots svg {
+    width: 100%;
+    height: auto;
+}
+
+input, button {
+    font-size: 1em;
+    padding: 4px 8px;
+}

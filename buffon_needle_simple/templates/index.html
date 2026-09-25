@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <title>Buffonova jehla</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<h1>Buffonova jehla (<span class="math"><var>l</var> ≤ <var>t</var></span>)</h1>
+
+<form id="params">
+    <label><span>Počet simulací <var>N</var></span>
+        <input type="number" name="n" min="1" value="1000" required>
+    </label>
+    <label><span>Délka jehly <var>l</var></span>
+        <input type="text" name="needle_length" value="1" required>
+    </label>
+    <label><span>Rozteč čar <var>t</var></span>
+        <input type="text" name="line_spacing" value="2" required>
+    </label>
+    <button type="submit">Spustit</button>
+    <button type="button" id="stop">Zastavit</button>
+</form>
+
+<p class="error" id="error"></p>
+<div id="results"></div>
+
+<script>
+    const form = document.getElementById("params");
+    const results = document.getElementById("results");
+    const error = document.getElementById("error");
+    let running = false;
+
+    // While running, ask the server for the next batch of needles
+    async function run() {
+        running = true;
+        const params = new FormData(form);
+        while (running) {
+            const response = await fetch("/step", {method: "POST", body: params});
+            const reply = await response.json();
+            if (reply.error) {
+                error.textContent = reply.error;
+                break;
+            }
+            error.textContent = "";
+            results.innerHTML = reply.html;
+            if (reply.done) {
+                break;
+            }
+        }
+        running = false;
+    }
+
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        if (!running) {
+            run();
+        }
+    });
+    document.getElementById("stop").addEventListener("click", () => running = false);
+</script>
+</body>
+</html>
