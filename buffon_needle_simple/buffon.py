@@ -56,6 +56,8 @@ def validate_parameters(n: int, needle_length: float, line_spacing: float) -> No
         raise ValueError("Počet simulací musí být alespoň 1.")
     if n > MAX_SIMULATIONS:
         raise ValueError(f"Počet simulací může být nejvýše {MAX_SIMULATIONS}.")
+    if not np.isfinite(needle_length) or not np.isfinite(line_spacing):
+        raise ValueError("Délka jehly a čar musí být konečná čísla.")
     if needle_length <= 0:
         raise ValueError("Délka jehly musí být kladná.")
     if line_spacing <= 0:
