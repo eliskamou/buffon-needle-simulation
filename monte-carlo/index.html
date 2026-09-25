@@ -581,7 +581,7 @@ function layoutStage() {
   G.ch = Math.max(1, Math.round(r.height * G.dpr));
   for (const c of [cv, bg, acc]) { c.width = G.cw; c.height = G.ch; }
   accClipped = false;                // resizing a canvas resets its state
-  const d = G.dpr, mx = 60 * d, mt = 54 * d, mb = 62 * d;
+  const d = G.dpr, mx = 64 * d, mt = 78 * d, mb = 66 * d;
   G.size = Math.max(10, Math.min(G.cw - 2 * mx, G.ch - mt - mb));
   G.ox = (G.cw - G.size) / 2;
   G.oy = mt + (G.ch - mt - mb - G.size) / 2;
@@ -639,12 +639,35 @@ function drawBoardBg() {
   // tick labels
   c.font = font(12, 600); c.fillStyle = '#9aa3d4';
   c.textAlign = 'center'; c.textBaseline = 'top';
-  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, X(v), y0 + s + 8 * d));
+  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, X(v), y0 + s + 20 * d));
   c.textAlign = 'right'; c.textBaseline = 'middle';
-  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, x0 - 10 * d, Y(v)));
-  c.font = font(14, 700); c.fillStyle = '#d7d2ff';
-  c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText('x', x0 + s + 8 * d, y0 + s + 6 * d);
-  c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillText('y', x0 - 10 * d, y0 - 6 * d);
+  [[-1, '−1'], [0, '0'], [1, '1']].forEach(([v, t]) => c.fillText(t, x0 - 22 * d, Y(v)));
+  drawAxisArrows(c);
+}
+
+// x and y axes running a bit past the square, arrowheads on the positive ends.
+function drawAxisArrows(c) {
+  const d = G.dpr, ext = 28 * d, tail = 14 * d, head = 9 * d;
+  const x0 = X(-1), x1 = X(1), y0 = Y(1), y1 = Y(-1), cx = X(0), cy = Y(0);
+  c.save();
+  c.strokeStyle = 'rgba(215, 210, 255, 0.9)'; c.fillStyle = 'rgba(215, 210, 255, 0.95)';
+  c.lineWidth = 1.5 * d; c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(x0 - tail, cy); c.lineTo(x1 + ext, cy);
+  c.moveTo(cx, y1 + tail); c.lineTo(cx, y0 - ext);
+  // tick marks where the axes cross the edge of the square (±1)
+  for (const tx of [x0, x1]) { c.moveTo(tx, cy - 5 * d); c.lineTo(tx, cy + 5 * d); }
+  for (const ty of [y0, y1]) { c.moveTo(cx - 5 * d, ty); c.lineTo(cx + 5 * d, ty); }
+  c.stroke();
+  c.beginPath();
+  c.moveTo(x1 + ext + head, cy); c.lineTo(x1 + ext, cy - head * 0.55); c.lineTo(x1 + ext, cy + head * 0.55); c.closePath();
+  c.moveTo(cx, y0 - ext - head); c.lineTo(cx - head * 0.55, y0 - ext); c.lineTo(cx + head * 0.55, y0 - ext); c.closePath();
+  c.fill();
+  c.font = `italic 700 ${17 * d}px "Cambria Math", "Times New Roman", Georgia, serif`;
+  c.textBaseline = 'middle';
+  c.textAlign = 'left'; c.fillText('x', x1 + ext + head + 6 * d, cy);
+  c.textAlign = 'left'; c.fillText('y', cx + 10 * d, y0 - ext - head * 0.4);
+  c.restore();
 }
 
 // Clears the point layer and clips it to the square.
@@ -1243,6 +1266,12 @@ function frame(now) {
   ctx.clearRect(0, 0, G.cw, G.ch);
   ctx.drawImage(bg, 0, 0);
   ctx.drawImage(acc, 0, 0);
+  if (S.N) {
+    ctx.strokeStyle = 'rgba(225, 228, 255, 0.3)'; ctx.lineWidth = 1 * G.dpr;
+    ctx.beginPath();
+    ctx.moveTo(X(-1), Y(0)); ctx.lineTo(X(1), Y(0)); ctx.moveTo(X(0), Y(-1)); ctx.lineTo(X(0), Y(1));
+    ctx.stroke();
+  }
   // the circle glows up briefly whenever a point lands inside it
   if (S.pulse > 0.01) {
     ctx.save();
