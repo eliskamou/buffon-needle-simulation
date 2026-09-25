@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="cs" translate="no">
 <head>
 <meta charset="utf-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Buffonova jehla</title>
 <style>
@@ -95,7 +96,10 @@
   }
   .pi-value .ok { color: var(--gold); text-shadow: 0 0 22px rgba(255, 209, 102, .65); }
   .pi-value .no { color: #dfe4ff; opacity: .5; }
-  .pi-sub { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-top: 4px; flex-wrap: wrap; }
+  /* always two fixed lines (error, then badge) so the panel never jumps as the texts change length */
+  .pi-sub { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; color: var(--muted); font-size: 13px; margin-top: 4px; }
+  #piErr { min-height: 1.3em; line-height: 1.3; white-space: nowrap; }
+  .pi-sub .badge { white-space: nowrap; }
   .badge {
     display: inline-block; font-size: 12px; font-weight: 600; color: var(--gold);
     background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .3);
@@ -110,7 +114,7 @@
   .formula {
     margin-top: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px;
     color: #c9cff5; text-align: center; padding: 8px; border-radius: 10px; background: rgba(123, 92, 255, .08);
-    border: 1px dashed rgba(123, 92, 255, .3); line-height: 1.5;
+    border: 1px dashed rgba(123, 92, 255, .3); line-height: 1.5; white-space: nowrap; overflow: hidden;
   }
 
   /* ---------- controls ---------- */
@@ -167,6 +171,19 @@
   .switch input:checked + .track { background: linear-gradient(135deg, var(--violet), var(--hit)); }
   .switch input:checked + .track::after { left: 19px; }
 
+  .switches { display: flex; gap: 18px; flex-wrap: wrap; }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent; font: inherit; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1.4px; font-weight: 700; font-size: 11.5px;
+    padding: 0 0 3px; margin-right: 14px; cursor: pointer;
+  }
+  .tab.on { color: #fff; border-bottom-color: var(--hit); }
+  .histbtns { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+  .histbtns button {
+    border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); border-radius: 999px;
+    font: inherit; font-size: 11px; font-weight: 700; padding: 2px 8px; cursor: pointer;
+  }
+  .histbtns button:hover { border-color: rgba(255,79,163,.6); background: rgba(255,79,163,.15); }
   .chart { width: 100%; height: 132px; display: block; }
   @media (min-height: 1150px) { .chart { height: 175px; } }
   .chart-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
@@ -285,12 +302,19 @@
           <button class="btn" data-drop="10000">+10k</button>
           <button class="btn" data-drop="100000">+100k</button>
         </div>
-        <label class="switch"><input type="checkbox" id="measureChk" checked><span class="track"></span><span data-i18n="showMeasure"></span></label>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" id="measureChk" checked><span class="track"></span><span data-i18n="showMeasure"></span></label>
+          <label class="switch"><input type="checkbox" id="soundChk"><span class="track"></span><span data-i18n="sound"></span></label>
+        </div>
       </div>
 
       <div class="card">
-        <h3><span data-i18n="convergence"></span><span data-i18n="convHint"></span></h3>
+        <h3>
+          <span><button class="tab on" data-tab="conv" data-i18n="convergence"></button><button class="tab" data-tab="hist" data-i18n="repeat"></button></span>
+          <span class="histbtns"><span data-i18n="repeatRuns"></span><button data-hist="100">100</button><button data-hist="1000">1k</button><button data-hist="10000">10k</button></span>
+        </h3>
         <canvas class="chart" id="conv"></canvas>
+        <div class="chart-note" id="histNote" data-i18n="histNote" hidden></div>
       </div>
 
       <div class="card">
@@ -346,10 +370,13 @@ const I18N = {
     paper: 'Papír',
     paperScreen: 'Celá plocha',
     speed: 'Rychlost',
-    perSec: 'jehel/s',
+    perSec: n => n === 1 ? 'jehla/s' : n >= 2 && n <= 4 ? 'jehly/s' : 'jehel/s',
     start: '▶ Start', pause: '❚❚ Pauza', reset: '↺ Znovu',
     showMeasure: 'Ukázat x a θ poslední jehly',
-    convergence: 'Vývoj odhadu', convHint: 'N log. · pás ±2σ',
+    convergence: 'Vývoj', repeat: 'Opakování', repeatRuns: '500× po N =', band: 'pás ±2σ',
+    histEmpty: 'Zvol N vpravo nahoře ↗',
+    histNote: '500 nezávislých pokusů po N jehlách. Víc jehel → užší zvon (σ ~ 1/√N). Čárkovaně teorie, v závorce teoretické σ.',
+    sound: 'Zvuk',
     phase: 'Prostor náhodných veličin (θ, x)',
     phaseHint: 'Každá jehla je bod. Protne čáru ⇔ x ≤ ½·l·sin θ (růžová oblast). Poměr ploch = 2l / (πt).',
     crosses: 'protíná ✓', nocross: 'neprotíná ✗',
@@ -358,7 +385,7 @@ const I18N = {
                  n === 1 ? '1 správné desetinné místo' :
                  n < 5 ? `${n} správná desetinná místa` : `${n} správných desetinných míst`,
     lines: 'čar',
-    keys: '<kbd>Mezerník</kbd> start/pauza · <kbd>N</kbd> jedna jehla · <kbd>R</kbd> znovu · <kbd>F</kbd> celá obrazovka · <kbd>L</kbd> jazyk',
+    keys: '<kbd>Mezerník</kbd> start/pauza · <kbd>N</kbd> jedna jehla · <kbd>R</kbd> znovu · <kbd>F</kbd> celá obrazovka · <kbd>L</kbd> jazyk · <kbd>S</kbd> zvuk',
     theoryHtml: `
       <h2>Buffonova úloha o jehle</h2>
       <p>Roku 1777 se francouzský přírodovědec <b>Georges-Louis Leclerc, hrabě de Buffon</b> zeptal:
@@ -411,10 +438,13 @@ const I18N = {
     paper: 'Paper',
     paperScreen: 'Full area',
     speed: 'Speed',
-    perSec: 'needles/s',
+    perSec: n => n === 1 ? 'needle/s' : 'needles/s',
     start: '▶ Start', pause: '❚❚ Pause', reset: '↺ Reset',
     showMeasure: 'Show x and θ of the last needle',
-    convergence: 'Convergence', convHint: 'log N · band ±2σ',
+    convergence: 'Convergence', repeat: 'Repeats', repeatRuns: '500× with N =', band: 'band ±2σ',
+    histEmpty: 'Pick N at the top right ↗',
+    histNote: '500 independent experiments of N needles. More needles → narrower bell (σ ~ 1/√N). Dashed: theory, theoretical σ in brackets.',
+    sound: 'Sound',
     phase: 'Space of random variables (θ, x)',
     phaseHint: 'Every needle is a point. It crosses a line ⇔ x ≤ ½·l·sin θ (pink area). Area ratio = 2l / (πt).',
     crosses: 'crosses ✓', nocross: 'no crossing ✗',
@@ -422,7 +452,7 @@ const I18N = {
     digits: n => n <= 0 ? 'no correct decimal places yet' :
                  n === 1 ? '1 correct decimal place' : `${n} correct decimal places`,
     lines: 'lines',
-    keys: '<kbd>Space</kbd> start/pause · <kbd>N</kbd> one needle · <kbd>R</kbd> reset · <kbd>F</kbd> fullscreen · <kbd>L</kbd> language',
+    keys: '<kbd>Space</kbd> start/pause · <kbd>N</kbd> one needle · <kbd>R</kbd> reset · <kbd>F</kbd> fullscreen · <kbd>L</kbd> language · <kbd>S</kbd> sound',
     theoryHtml: `
       <h2>Buffon's needle problem</h2>
       <p>In 1777 the French naturalist <b>Georges-Louis Leclerc, Comte de Buffon</b> asked:
@@ -676,7 +706,8 @@ function sampleNeedle(near) {
   let cy = S.lines[k] + side * x;
   if (cy < 0 || cy > S.H) { side = -side; cy = S.lines[k] + side * x; }
   const hl = S.l / 2;
-  const cx = near ? clamp(near.x, hl * 0.2, S.W - hl * 0.2) : hl + Math.random() * (S.W - 2 * hl);
+  // Uniform over the whole width; the needle layer is clipped to the sheet, so edges look like real paper.
+  const cx = near ? clamp(near.x, 0, S.W) : Math.random() * S.W;
   const phi = Math.random() < 0.5 ? theta : -theta;
 
   let px = cx, py = S.lines[k];
@@ -723,7 +754,7 @@ function commit(n, animated) {
   drawPhasePoint(n);
   pushHistory();
   S.last = n; S.lastT = performance.now();
-  if (animated) spawnEffect(n);
+  if (animated) { spawnEffect(n); playLand(n.hit); }
   S.statsDirty = true; S.phaseDirty = true;
 }
 
@@ -772,6 +803,46 @@ function resetAccum() {
 function redrawAccum() {
   resetAccum();
   ringEach(n => drawSettled(accx, n));
+}
+
+/* ======================================================================
+   Sound – synthesised with Web Audio, no files needed
+   ====================================================================== */
+const Snd = { ctx: null, on: false, last: 0 };
+const PENTATONIC = [0, 2, 4, 7, 9, 12, 14];
+
+function enableSound(on) {
+  Snd.on = on;
+  if (!on) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!Snd.ctx && AC) Snd.ctx = new AC();
+  if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume();
+}
+
+function tone(ac, freq, type, peak, decay, when) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(peak, when + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+  o.connect(g).connect(ac.destination);
+  o.start(when); o.stop(when + decay + 0.02);
+}
+
+function playLand(hit) {
+  const ac = Snd.ctx;
+  if (!Snd.on || !ac) return;
+  const now = ac.currentTime;
+  if (now - Snd.last < 0.045) return;      // at high speed don't turn into noise
+  Snd.last = now;
+  if (hit) {                               // small glass bell on a pentatonic scale
+    const f = 660 * Math.pow(2, PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)] / 12);
+    // kept quiet: the ear is far more sensitive to these high notes than to the low tick
+    tone(ac, f, 'sine', 0.05, 0.55, now);
+    tone(ac, f * 2.76, 'sine', 0.01, 0.2, now);
+  } else {                                 // soft wooden tick
+    tone(ac, 190 + Math.random() * 40, 'triangle', 0.07, 0.09, now);
+  }
 }
 
 /* ======================================================================
@@ -1028,6 +1099,8 @@ function drawConv() {
   for (let i = lo.length - 1; i >= 0; i--) c.lineTo(lo[i][0], lo[i][1]);
   c.closePath();
   c.fillStyle = 'rgba(123,92,255,0.16)'; c.fill();
+  c.font = font(10.5, 600); c.fillStyle = 'rgba(185,170,255,0.8)'; c.textAlign = 'right'; c.textBaseline = 'top';
+  c.fillText(T.band, w - pr - 5 * d, pt + 4 * d);
 
   // decade grid
   c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1 * d;
@@ -1065,6 +1138,120 @@ function drawConv() {
   c.fillText(dec(PI - yr, dd), pl - 6 * d, h - pb - 6 * d);
   c.fillStyle = '#ffd166'; c.font = font(12, 700);
   c.fillText('π', pl - 6 * d, Y(PI));
+}
+
+/* ======================================================================
+   Repeated experiment: 500 independent runs of N needles → distribution of π̂
+   ====================================================================== */
+const REP_RUNS = 500, REP_BINS = 90, REP_SIZES = [100, 1000, 10000];
+const REP_COLORS = { 100: '64,210,255', 1000: '176,150,255', 10000: '255,79,163' };
+const REP = { tab: 'conv', data: {}, dirty: false };
+
+// Standard deviation of π̂ = 2lN/(tH) by the delta method.
+const sigmaFor = N => { const p = pTheory(); return PI * Math.sqrt((1 - p) / (p * N)); };
+// Fixed x-range (±4σ of the N = 100 case), so the bells for different N can be compared.
+const repRange = () => clamp(4 * sigmaFor(100), 0.05, 2.5);
+
+function erf(x) {                // Abramowitz–Stegun 7.1.26, |error| < 1.5e-7
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+const Phi = z => 0.5 * (1 + erf(z / Math.SQRT2));
+
+function startRepeat(N) {
+  REP.data[N] = { counts: new Float64Array(REP_BINS), runs: 0, fin: 0, sum: 0, sumSq: 0 };
+  setTab('hist');
+}
+
+function stepRepeat() {
+  const hl = S.l / 2, ht = S.t / 2;
+  const R = repRange(), lo = PI - R, bw = 2 * R / REP_BINS;
+  let busy = false;
+  for (const N of REP_SIZES) {
+    const h = REP.data[N];
+    if (!h || h.runs >= REP_RUNS) continue;
+    busy = true;
+    const k = Math.min(REP_RUNS - h.runs, Math.ceil(REP_RUNS / 45));   // ~¾ s of animation
+    for (let r = 0; r < k; r++) {
+      let hits = 0;
+      for (let i = 0; i < N; i++) if (Math.random() * ht <= hl * Math.sin(Math.random() * PI / 2)) hits++;
+      h.runs++;
+      if (!hits) continue;                        // π̂ = ∞, can only happen for tiny l/t
+      const e = 2 * S.l * N / (S.t * hits);
+      h.fin++; h.sum += e; h.sumSq += e * e;
+      const b = Math.floor((e - lo) / bw);
+      if (b >= 0 && b < REP_BINS) h.counts[b]++;
+    }
+  }
+  return busy;
+}
+
+function drawHist() {
+  const c = cvx, d = G.dpr, w = cvCv.width, h = cvCv.height;
+  const pl = 12 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d, pw = w - pl - pr, ph = h - pt - pb;
+  const R = repRange(), lo = PI - R, bw = 2 * R / REP_BINS;
+  const X = e => pl + (e - lo) / (2 * R) * pw;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(255,255,255,0.02)'; c.fillRect(pl, pt, pw, ph);
+
+  const shown = REP_SIZES.filter(N => REP.data[N]);
+  c.save();
+  c.beginPath(); c.rect(pl, pt, pw, ph); c.clip();
+  for (const N of shown) {
+    const hd = REP.data[N], col = REP_COLORS[N], sig = sigmaFor(N);
+    const expected = e => REP_RUNS * (Phi((e + bw / 2 - PI) / sig) - Phi((e - bw / 2 - PI) / sig));
+    // Each bell is scaled to its own theoretical peak, so bars grow up towards the dashed curve.
+    const top = Math.max(expected(PI), ...hd.counts) * 1.08;
+    const Y = v => pt + ph - v / top * ph;
+    c.beginPath(); c.moveTo(X(lo), Y(0));
+    for (let b = 0; b < REP_BINS; b++) { c.lineTo(X(lo + b * bw), Y(hd.counts[b])); c.lineTo(X(lo + (b + 1) * bw), Y(hd.counts[b])); }
+    c.lineTo(X(PI + R), Y(0)); c.closePath();
+    c.fillStyle = `rgba(${col},0.28)`; c.fill();
+    c.strokeStyle = `rgba(${col},0.95)`; c.lineWidth = 1.3 * d; c.stroke();
+    c.beginPath();
+    for (let i = 0; i <= 240; i++) {
+      const e = lo + i / 240 * 2 * R;
+      i ? c.lineTo(X(e), Y(expected(e))) : c.moveTo(X(e), Y(expected(e)));
+    }
+    c.setLineDash([4 * d, 3 * d]); c.strokeStyle = `rgba(${col},0.9)`; c.lineWidth = 1.2 * d; c.stroke(); c.setLineDash([]);
+  }
+  c.setLineDash([6 * d, 5 * d]); c.strokeStyle = 'rgba(255,209,102,0.85)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(X(PI), pt); c.lineTo(X(PI), pt + ph); c.stroke(); c.setLineDash([]);
+  c.restore();
+
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d; c.strokeRect(pl, pt, pw, ph);
+  c.font = font(11, 500); c.fillStyle = '#8e98c7'; c.textBaseline = 'top';
+  const dd = R < 0.1 ? 3 : 2;
+  c.textAlign = 'left'; c.fillText(dec(PI - R, dd), pl, pt + ph + 5 * d);
+  c.textAlign = 'right'; c.fillText(dec(PI + R, dd), pl + pw, pt + ph + 5 * d);
+  c.textAlign = 'center'; c.fillStyle = '#ffd166'; c.font = font(12, 700); c.fillText('π', X(PI), pt + ph + 4 * d);
+
+  c.textBaseline = 'middle';
+  if (!shown.length) {
+    c.font = font(11.5, 500); c.fillStyle = '#8e98c7'; c.textAlign = 'center';
+    c.fillText(T.histEmpty, pl + pw / 2, pt + ph / 2);
+    return;
+  }
+  // legend: measured spread vs. theory
+  c.font = font(10.5, 600); c.textAlign = 'left';
+  shown.forEach((N, i) => {
+    const hd = REP.data[N];
+    const mean = hd.fin ? hd.sum / hd.fin : 0;
+    const sd = hd.fin > 1 ? Math.sqrt(Math.max(0, (hd.sumSq - hd.fin * mean * mean) / (hd.fin - 1))) : 0;
+    const prog = hd.runs < REP_RUNS ? `  ${hd.runs}/${REP_RUNS}` : '';
+    c.fillStyle = `rgb(${REP_COLORS[N]})`;
+    c.fillText(`N=${int(N)}  σ=${dec(sd, 3)} (${dec(sigmaFor(N), 3)})${prog}`, pl + 5 * d, pt + (9 + i * 14) * d);
+  });
+}
+
+function drawChart() { REP.tab === 'hist' ? drawHist() : drawConv(); }
+
+function setTab(tab) {
+  REP.tab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  $('histNote').hidden = tab !== 'hist';
+  drawChart();
 }
 
 function resizeCharts() {
@@ -1111,11 +1298,12 @@ function updateStats() {
     }
     S.bestDigits = Math.max(S.bestDigits, digits);
   }
-  $('formula').textContent = S.hits
-    ? `π ≈ 2·l·N / (t·H) = 2·${dec(S.l, 1)}·${int(S.N)} / (${dec(S.t, 1)}·${int(S.hits)})`
-    : 'π ≈ 2·l·N / (t·H)';
+  // always two lines (formula, then the numbers) so the box never changes height
+  $('formula').innerHTML = 'π ≈ 2·l·N / (t·H)<br>' + (S.hits
+    ? `= 2·${dec(S.l, 1)}·${int(S.N)} / (${dec(S.t, 1)}·${int(S.hits)})`
+    : '&nbsp;');
   $('hint').classList.toggle('hidden', S.N > 0 || S.flying.length > 0);
-  drawConv();
+  drawChart();
 }
 
 function updatePaperInfo() {
@@ -1134,6 +1322,7 @@ function reset() {
   S.N = 0; S.hits = 0; S.history = []; S.lastHistN = 0; S.pending = 0;
   S.flying = []; S.effects = []; S.ringStart = 0; S.ringLen = 0;
   S.last = null; S.spawnAcc = 0; S.bestDigits = 0;
+  REP.data = {};                 // the histograms depend on l and t
   setPaperDims();
   fit();
   drawPaperBg();
@@ -1171,6 +1360,8 @@ function frame(now) {
     S.pending -= n;
     dropInstant(n);
   }
+
+  if (stepRepeat() || REP.dirty) { if (REP.tab === 'hist') drawHist(); REP.dirty = false; }
 
   // land the needles whose fall is over
   if (S.flying.length) {
@@ -1214,7 +1405,7 @@ function syncControls() {
   lSlider.value = S.l; tSlider.value = S.t; rSlider.value = sliderFromRate(S.rate);
   $('lVal').textContent = `${dec(S.l, 1)} cm`;
   $('tVal').textContent = `${dec(S.t, 1)} cm`;
-  $('rVal').textContent = `${int(S.rate)} ${T.perSec}`;
+  $('rVal').textContent = `${int(S.rate)} ${T.perSec(S.rate)}`;
   [lSlider, tSlider, rSlider].forEach(paintSlider);
   $('btnPlay').textContent = S.running ? T.pause : T.start;
   document.querySelectorAll('#paperSeg button').forEach(b => b.classList.toggle('on', b.dataset.paper === S.paper));
@@ -1241,6 +1432,9 @@ $('btnPlay').addEventListener('click', togglePlay);
 $('btnReset').addEventListener('click', reset);
 document.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => drop(+b.dataset.drop)));
 $('measureChk').addEventListener('change', e => { S.showMeasure = e.target.checked; S.phaseDirty = true; });
+$('soundChk').addEventListener('change', e => enableSound(e.target.checked));
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.querySelectorAll('[data-hist]').forEach(b => b.addEventListener('click', () => startRepeat(+b.dataset.hist)));
 
 cv.addEventListener('pointerdown', e => {
   const r = cv.getBoundingClientRect();
@@ -1267,7 +1461,7 @@ function setLang(lang) {
   $('btnLang').textContent = lang === 'cs' ? 'EN' : 'CZ';
   syncControls();
   updatePaperInfo();
-  if (G.cw > 1) { drawPaperBg(); drawPhaseBg(); }
+  if (G.cw > 1) { drawPaperBg(); drawPhaseBg(); REP.dirty = true; }
   S.statsDirty = true; S.phaseDirty = true;
 }
 $('btnLang').addEventListener('click', () => setLang(S.lang === 'cs' ? 'en' : 'cs'));
@@ -1286,6 +1480,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'r') reset();
   else if (k === 'f') toggleFull();
   else if (k === 'l') setLang(S.lang === 'cs' ? 'en' : 'cs');
+  else if (k === 's') { const c = $('soundChk'); c.checked = !c.checked; enableSound(c.checked); }
 });
 
 let resizeQueued = false;
