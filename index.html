@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buffonova jehla</title>
+<style>
+  :root {
+    --bg0: #05070f;
+    --panel: rgba(16, 22, 50, 0.62);
+    --border: rgba(140, 160, 255, 0.16);
+    --text: #e8ecff;
+    --muted: #8e98c7;
+    --hit: #ff4fa3;
+    --miss: #40d2ff;
+    --gold: #ffd166;
+    --violet: #7b5cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1200px 800px at 15% 0%, #17215a 0%, transparent 60%),
+      radial-gradient(900px 700px at 100% 100%, #34104a 0%, transparent 60%),
+      var(--bg0);
+  }
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 22px; border-bottom: 1px solid var(--border);
+  }
+  .logo { width: 42px; height: 42px; flex: none; filter: drop-shadow(0 0 10px rgba(255, 79, 163, .5)); }
+  .brand h1 {
+    font-size: 24px; font-weight: 800; letter-spacing: .3px;
+    background: linear-gradient(90deg, #ffffff, #b9b3ff 45%, #ff8cc6);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand p { color: var(--muted); font-size: 13.5px; margin-top: 1px; }
+  .hdr-actions { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- layout ---------- */
+  main { display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+  #stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+  #paper { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  aside {
+    overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+    border-left: 1px solid var(--border);
+    scrollbar-width: thin; scrollbar-color: rgba(140,160,255,.25) transparent;
+  }
+
+  .overlay { position: absolute; pointer-events: none; font-size: 13px; color: var(--muted); }
+  #paperInfo { top: 12px; left: 20px; right: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    background: rgba(10, 14, 34, .7); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; backdrop-filter: blur(6px); white-space: nowrap;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  #legend { bottom: 12px; left: 20px; display: flex; gap: 10px; }
+  .dot { display: inline-block; width: 18px; height: 3px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .dot.hit { background: var(--hit); box-shadow: 0 0 8px var(--hit); }
+  .dot.miss { background: var(--miss); box-shadow: 0 0 8px var(--miss); }
+  #hint {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 22px; font-weight: 600; color: #fff; text-align: center;
+    padding: 18px 28px; border-radius: 18px;
+    background: rgba(10, 14, 34, .72); border: 1px solid var(--border);
+    backdrop-filter: blur(8px); box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  #hint small { display: block; font-size: 14px; font-weight: 400; color: var(--muted); margin-top: 6px; }
+  #hint.hidden { display: none; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 rgba(255,79,163,0), 0 20px 60px rgba(0,0,0,.5); }
+                     50% { box-shadow: 0 0 40px rgba(255,79,163,.35), 0 20px 60px rgba(0,0,0,.5); } }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 12px 16px; backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .card h3 {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted);
+    font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .card h3 span:last-child { text-transform: none; letter-spacing: 0; font-weight: 500; opacity: .85; }
+
+  .pi-value {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+    font-size: 54px; font-weight: 700; line-height: 1.05; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .pi-value .ok { color: var(--gold); text-shadow: 0 0 22px rgba(255, 209, 102, .65); }
+  .pi-value .no { color: #dfe4ff; opacity: .5; }
+  .pi-sub { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-top: 4px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--gold);
+    background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .3);
+    padding: 3px 10px; border-radius: 999px; transition: transform .25s;
+  }
+  .badge.pop { transform: scale(1.12); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); border-radius: 10px; padding: 6px 8px; min-width: 0; }
+  .stat .k { display: block; font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+  .stat .v { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat .v.hit { color: #ff8cc6; }
+  .formula {
+    margin-top: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px;
+    color: #c9cff5; text-align: center; padding: 8px; border-radius: 10px; background: rgba(123, 92, 255, .08);
+    border: 1px dashed rgba(123, 92, 255, .3); line-height: 1.5;
+  }
+
+  /* ---------- controls ---------- */
+  .ctrl { margin-bottom: 10px; }
+  .ctrl-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; margin-bottom: 7px; }
+  .ctrl-top .val { font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ctrl.inline { display: flex; align-items: center; gap: 12px; font-size: 13.5px; }
+  .ctrl.inline .seg { flex: 1; }
+  .note { font-size: 11.5px; color: var(--muted); margin: -4px 0 10px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 6px; outline: none; cursor: pointer;
+    background: linear-gradient(90deg, var(--violet), var(--hit) var(--fill, 50%), rgba(255,255,255,.12) var(--fill, 50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: none;
+    box-shadow: 0 0 0 4px rgba(123, 92, 255, .35), 0 0 16px rgba(255, 79, 163, .7);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%; background: #fff; border: none;
+    box-shadow: 0 0 0 4px rgba(123, 92, 255, .35), 0 0 16px rgba(255, 79, 163, .7);
+  }
+
+  .seg { display: flex; background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button {
+    flex: 1; border: none; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+    padding: 6px 4px; border-radius: 7px; cursor: pointer; transition: .15s;
+  }
+  .seg button.on { background: linear-gradient(135deg, rgba(123,92,255,.55), rgba(255,79,163,.45)); color: #fff; }
+
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text);
+    border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background .15s, border-color .15s, transform .08s;
+  }
+  .btn:hover { background: rgba(255,255,255,.1); border-color: rgba(160,170,255,.45); }
+  .btn:active { transform: scale(.97); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--violet), var(--hit)); border: none; color: #fff;
+    box-shadow: 0 6px 22px rgba(255, 79, 163, .35);
+  }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .btn.icon { padding: 8px 11px; }
+  .row { display: flex; gap: 8px; }
+  .row .btn { flex: 1; padding-left: 4px; padding-right: 4px; }
+  .row + .row { margin-top: 8px; }
+  #btnPlay { flex: 2; font-size: 16px; }
+
+  .switch { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; margin-top: 10px; user-select: none; }
+  .switch input { display: none; }
+  .switch .track { width: 38px; height: 22px; border-radius: 22px; background: rgba(255,255,255,.12); position: relative; transition: .2s; flex: none; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch input:checked + .track { background: linear-gradient(135deg, var(--violet), var(--hit)); }
+  .switch input:checked + .track::after { left: 19px; }
+
+  .chart { width: 100%; height: 132px; display: block; }
+  @media (min-height: 1150px) { .chart { height: 175px; } }
+  .chart-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .kbd { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.7; }
+  kbd {
+    font-family: inherit; font-size: 11px; padding: 1px 6px; border-radius: 5px;
+    border: 1px solid var(--border); background: rgba(255,255,255,.05); color: #cdd3f5;
+  }
+
+  /* ---------- theory modal ---------- */
+  #modal {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px;
+    background: rgba(3, 5, 14, .7); backdrop-filter: blur(8px); z-index: 10;
+  }
+  #modal.open { display: flex; }
+  #modal .card { max-width: 760px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 26px 30px; position: relative; background: rgba(16, 22, 50, .95); }
+  #modal h2 { font-size: 24px; margin-bottom: 12px; }
+  #modal h4 { font-size: 15px; margin: 18px 0 6px; color: #b9b3ff; }
+  #modal p, #modal li { font-size: 15px; line-height: 1.6; color: #d4d9f5; }
+  #modal ul { padding-left: 20px; }
+  #modal .eq {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 16px; text-align: center; margin: 12px 0;
+    padding: 12px; border-radius: 12px; background: rgba(123, 92, 255, .1); border: 1px solid rgba(123, 92, 255, .3); color: #fff;
+  }
+  #modal .close { position: absolute; top: 14px; right: 14px; }
+
+  @media (max-width: 1000px) {
+    html, body { overflow: auto; }
+    #app { height: auto; }
+    main { grid-template-columns: 1fr; }
+    #stage { height: 62vh; }
+    aside { border-left: none; overflow: visible; }
+    .brand p { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#7b5cff"/><stop offset="1" stop-color="#ff4fa3"/></linearGradient></defs>
+      <line x1="2" y1="14" x2="46" y2="14" stroke="#a99cff" stroke-width="1.5" opacity=".7"/>
+      <line x1="2" y1="34" x2="46" y2="34" stroke="#a99cff" stroke-width="1.5" opacity=".7"/>
+      <line x1="10" y1="40" x2="36" y2="8" stroke="url(#lg)" stroke-width="3.2" stroke-linecap="round"/>
+      <circle cx="10" cy="40" r="3" fill="#ff8cc6"/>
+    </svg>
+    <div class="brand">
+      <h1 data-i18n="title"></h1>
+      <p data-i18n="subtitle"></p>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn" id="btnTheory" data-i18n="theoryBtn"></button>
+      <button class="btn icon" id="btnLang" title="Language / Jazyk"></button>
+      <button class="btn icon" id="btnFull" data-i18n-title="fullscreen">⛶</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="stage">
+      <canvas id="paper"></canvas>
+      <div class="overlay" id="paperInfo"></div>
+      <div class="overlay" id="legend">
+        <span class="chip"><span class="dot hit"></span><span data-i18n="legendHit"></span></span>
+        <span class="chip"><span class="dot miss"></span><span data-i18n="legendMiss"></span></span>
+      </div>
+      <div class="overlay" id="hint"><span data-i18n="hint"></span><small data-i18n="hintSmall"></small></div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h3><span data-i18n="estimate"></span><span id="piTrue">π = 3.14159265…</span></h3>
+        <div class="pi-value" id="piValue">—</div>
+        <div class="pi-sub"><span id="piErr"></span><span class="badge" id="badge"></span></div>
+        <div class="stats">
+          <div class="stat"><span class="k" data-i18n="needles"></span><span class="v" id="stN">0</span></div>
+          <div class="stat"><span class="k" data-i18n="hits"></span><span class="v hit" id="stH">0</span></div>
+          <div class="stat"><span class="k" data-i18n="ratio"></span><span class="v" id="stP">—</span></div>
+          <div class="stat"><span class="k" data-i18n="theory"></span><span class="v" id="stPT">—</span></div>
+        </div>
+        <div class="formula" id="formula"></div>
+      </div>
+
+      <div class="card">
+        <div class="pair">
+          <div class="ctrl">
+            <div class="ctrl-top"><span data-i18n="needleLen"></span><span class="val" id="lVal"></span></div>
+            <input type="range" id="lSlider" min="0.5" max="10" step="0.1">
+          </div>
+          <div class="ctrl">
+            <div class="ctrl-top"><span data-i18n="spacing"></span><span class="val" id="tVal"></span></div>
+            <input type="range" id="tSlider" min="1" max="10" step="0.1">
+          </div>
+        </div>
+        <div class="note" data-i18n="constraint"></div>
+        <div class="ctrl inline">
+          <span data-i18n="paper"></span>
+          <div class="seg" id="paperSeg">
+            <button data-paper="a4">A4</button>
+            <button data-paper="a3">A3</button>
+            <button data-paper="screen" data-i18n="paperScreen"></button>
+          </div>
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><span data-i18n="speed"></span><span class="val" id="rVal"></span></div>
+          <input type="range" id="rSlider" min="0" max="1000" step="1">
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnPlay"></button>
+          <button class="btn" id="btnReset" data-i18n="reset"></button>
+        </div>
+        <div class="row">
+          <button class="btn" data-drop="1">+1</button>
+          <button class="btn" data-drop="10">+10</button>
+          <button class="btn" data-drop="100">+100</button>
+          <button class="btn" data-drop="1000">+1k</button>
+          <button class="btn" data-drop="10000">+10k</button>
+          <button class="btn" data-drop="100000">+100k</button>
+        </div>
+        <label class="switch"><input type="checkbox" id="measureChk" checked><span class="track"></span><span data-i18n="showMeasure"></span></label>
+      </div>
+
+      <div class="card">
+        <h3><span data-i18n="convergence"></span><span data-i18n="convHint"></span></h3>
+        <canvas class="chart" id="conv"></canvas>
+      </div>
+
+      <div class="card">
+        <h3><span data-i18n="phase"></span></h3>
+        <canvas class="chart" id="phase"></canvas>
+        <div class="chart-note" data-i18n="phaseHint"></div>
+      </div>
+
+      <div class="kbd" data-i18n-html="keys"></div>
+    </aside>
+  </main>
+</div>
+
+<div id="modal">
+  <div class="card">
+    <button class="btn icon close" id="btnClose">✕</button>
+    <div id="theoryBody"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// Language shown on start ('cs' or 'en'); visitors can switch with the button or L key.
+const DEFAULT_LANG = 'cs';
+const PI = Math.PI;
+const PI_DIGITS = '3.14159265358979';
+const $ = id => document.getElementById(id);
+
+/* ======================================================================
+   Texts
+   ====================================================================== */
+const I18N = {
+  cs: {
+    title: 'Buffonova jehla',
+    subtitle: 'Házíme jehly na linkovaný papír – a z náhody vychází π',
+    theoryBtn: 'Jak to funguje?',
+    fullscreen: 'Celá obrazovka (F)',
+    legendHit: 'protíná čáru',
+    legendMiss: 'neprotíná',
+    hint: 'Klikni na papír nebo stiskni ▶ Start',
+    hintSmall: 'každé kliknutí = jedna hozená jehla',
+    estimate: 'Odhad π',
+    needles: 'Jehel N',
+    hits: 'Protnutí H',
+    ratio: 'H / N',
+    theory: 'Teorie 2l/πt',
+    controls: 'Parametry pokusu',
+    needleLen: 'Délka jehly l',
+    spacing: 'Vzdálenost čar t',
+    constraint: 'Krátká jehla: vždy l ≤ t. Změna parametrů pokus vynuluje.',
+    paper: 'Papír',
+    paperScreen: 'Celá plocha',
+    speed: 'Rychlost',
+    perSec: 'jehel/s',
+    start: '▶ Start', pause: '❚❚ Pauza', reset: '↺ Znovu',
+    showMeasure: 'Ukázat x a θ poslední jehly',
+    convergence: 'Vývoj odhadu', convHint: 'N log. · pás ±2σ',
+    phase: 'Prostor náhodných veličin (θ, x)',
+    phaseHint: 'Každá jehla je bod. Protne čáru ⇔ x ≤ ½·l·sin θ (růžová oblast). Poměr ploch = 2l / (πt).',
+    crosses: 'protíná ✓', nocross: 'neprotíná ✗',
+    err: 'odchylka',
+    digits: n => n <= 0 ? 'zatím žádné správné desetinné místo' :
+                 n === 1 ? '1 správné desetinné místo' :
+                 n < 5 ? `${n} správná desetinná místa` : `${n} správných desetinných míst`,
+    lines: 'čar',
+    keys: '<kbd>Mezerník</kbd> start/pauza · <kbd>N</kbd> jedna jehla · <kbd>R</kbd> znovu · <kbd>F</kbd> celá obrazovka · <kbd>L</kbd> jazyk',
+    theoryHtml: `
+      <h2>Buffonova úloha o jehle</h2>
+      <p>Roku 1777 se francouzský přírodovědec <b>Georges-Louis Leclerc, hrabě de Buffon</b> zeptal:
+      jaká je pravděpodobnost, že jehla délky <i>l</i> hozená náhodně na papír s rovnoběžnými čarami
+      ve vzdálenosti <i>t</i> protne některou čáru? Odpověď překvapivě obsahuje číslo π.</p>
+      <h4>Model</h4>
+      <ul>
+        <li><b>x</b> – vzdálenost středu jehly od nejbližší čáry, rovnoměrně na intervalu ⟨0, t/2⟩</li>
+        <li><b>θ</b> – ostrý úhel mezi jehlou a čarami, rovnoměrně na intervalu ⟨0, π/2⟩</li>
+        <li>x a θ jsou nezávislé, jejich sdružená hustota je konstantní: 4 / (tπ)</li>
+      </ul>
+      <p>Svislá „výška“ poloviny jehly je ½·l·sin θ. Jehla tedy protne čáru právě tehdy, když
+      <b>x ≤ ½·l·sin θ</b>.</p>
+      <div class="eq">P = ∫<sub>0</sub><sup>π/2</sup> ∫<sub>0</sub><sup>(l/2)·sin θ</sup> 4/(tπ) dx dθ
+        = 4/(tπ) · (l/2) · ∫<sub>0</sub><sup>π/2</sup> sin θ dθ = 2l / (tπ)</div>
+      <p>Hodíme-li <i>N</i> jehel a <i>H</i> z nich protne čáru, je H/N ≈ P, a tedy</p>
+      <div class="eq">π ≈ 2·l·N / (t·H)</div>
+      <h4>Záleží na velikosti papíru?</h4>
+      <p>Ne. Pravděpodobnost závisí jen na poměru l/t. Papír musí být jen dost velký, aby jehly nepadaly mimo
+      a aby každá jehla měla „svou“ nejbližší čáru. Formát A4/A3 tu mění jen vzhled, ne výsledek.</p>
+      <h4>Proč l ≤ t?</h4>
+      <p>Krátká jehla může protnout nejvýše jednu čáru – proto platí tak jednoduchý vzorec.
+      Pro dlouhou jehlu (l &gt; t) je výpočet složitější.</p>
+      <h4>Jak rychle se blížíme k π?</h4>
+      <p>Pomalu! Chyba klesá jako 1/√N – na každou další správnou číslici potřebujeme zhruba
+      100× víc jehel. Nejrychleji to jde při l = t. Zkuste sledovat graf vývoje odhadu.</p>
+      <h4>Zajímavost</h4>
+      <p>Italský matematik Mario Lazzarini roku 1901 údajně hodil 3408 jehel a dostal π ≈ 3,1415929 –
+      tedy 6 správných desetinných míst. To je podezřele dobré: jde přesně o zlomek 355/113 a s tak málo
+      pokusy je taková přesnost téměř nemožná. Nejspíš přestal házet ve „správnou“ chvíli.</p>`
+  },
+  en: {
+    title: "Buffon's Needle",
+    subtitle: 'Drop needles on ruled paper – and watch π emerge from randomness',
+    theoryBtn: 'How does it work?',
+    fullscreen: 'Fullscreen (F)',
+    legendHit: 'crosses a line',
+    legendMiss: 'no crossing',
+    hint: 'Click the paper or press ▶ Start',
+    hintSmall: 'every click = one dropped needle',
+    estimate: 'Estimate of π',
+    needles: 'Needles N',
+    hits: 'Crossings H',
+    ratio: 'H / N',
+    theory: 'Theory 2l/πt',
+    controls: 'Experiment parameters',
+    needleLen: 'Needle length l',
+    spacing: 'Line spacing t',
+    constraint: 'Short needle: always l ≤ t. Changing parameters resets the experiment.',
+    paper: 'Paper',
+    paperScreen: 'Full area',
+    speed: 'Speed',
+    perSec: 'needles/s',
+    start: '▶ Start', pause: '❚❚ Pause', reset: '↺ Reset',
+    showMeasure: 'Show x and θ of the last needle',
+    convergence: 'Convergence', convHint: 'log N · band ±2σ',
+    phase: 'Space of random variables (θ, x)',
+    phaseHint: 'Every needle is a point. It crosses a line ⇔ x ≤ ½·l·sin θ (pink area). Area ratio = 2l / (πt).',
+    crosses: 'crosses ✓', nocross: 'no crossing ✗',
+    err: 'error',
+    digits: n => n <= 0 ? 'no correct decimal places yet' :
+                 n === 1 ? '1 correct decimal place' : `${n} correct decimal places`,
+    lines: 'lines',
+    keys: '<kbd>Space</kbd> start/pause · <kbd>N</kbd> one needle · <kbd>R</kbd> reset · <kbd>F</kbd> fullscreen · <kbd>L</kbd> language',
+    theoryHtml: `
+      <h2>Buffon's needle problem</h2>
+      <p>In 1777 the French naturalist <b>Georges-Louis Leclerc, Comte de Buffon</b> asked:
+      what is the probability that a needle of length <i>l</i>, dropped at random onto paper ruled with
+      parallel lines a distance <i>t</i> apart, crosses one of the lines? Surprisingly, the answer contains π.</p>
+      <h4>The model</h4>
+      <ul>
+        <li><b>x</b> – distance from the needle's centre to the nearest line, uniform on [0, t/2]</li>
+        <li><b>θ</b> – acute angle between the needle and the lines, uniform on [0, π/2]</li>
+        <li>x and θ are independent, so their joint density is constant: 4 / (tπ)</li>
+      </ul>
+      <p>Half of the needle reaches ½·l·sin θ vertically, so the needle crosses a line exactly when
+      <b>x ≤ ½·l·sin θ</b>.</p>
+      <div class="eq">P = ∫<sub>0</sub><sup>π/2</sup> ∫<sub>0</sub><sup>(l/2)·sin θ</sup> 4/(tπ) dx dθ
+        = 4/(tπ) · (l/2) · ∫<sub>0</sub><sup>π/2</sup> sin θ dθ = 2l / (tπ)</div>
+      <p>Drop <i>N</i> needles, count the <i>H</i> that cross a line; then H/N ≈ P and therefore</p>
+      <div class="eq">π ≈ 2·l·N / (t·H)</div>
+      <h4>Does the paper size matter?</h4>
+      <p>No. The probability only depends on the ratio l/t. The paper just has to be big enough that needles
+      don't fall off and each needle has a nearest line. A4/A3 here only changes the look, not the result.</p>
+      <h4>Why l ≤ t?</h4>
+      <p>A short needle can cross at most one line, which is why the formula is so simple.
+      For a long needle (l &gt; t) the calculation is more involved.</p>
+      <h4>How fast do we approach π?</h4>
+      <p>Slowly! The error shrinks like 1/√N – every extra correct digit needs roughly 100× more needles.
+      It converges fastest when l = t. Watch the convergence chart.</p>
+      <h4>Fun fact</h4>
+      <p>In 1901 the Italian mathematician Mario Lazzarini supposedly dropped 3408 needles and got
+      π ≈ 3.1415929 – six correct decimals. That is suspiciously good: it's exactly 355/113, and with so few
+      throws such accuracy is almost impossible. He most likely stopped at the "right" moment.</p>`
+  }
+};
+let T = I18N[DEFAULT_LANG];
+
+/* ======================================================================
+   State
+   ====================================================================== */
+const PAPERS = { a4: [29.7, 21], a3: [42, 29.7] };
+const HIT  = { rgb: '255,79,163', head: '#ffb0d6' };
+const MISS = { rgb: '64,210,255', head: '#a8ecff' };
+const RING_MAX = 40000;          // settled needles kept for redrawing after a resize
+
+const S = {
+  lang: DEFAULT_LANG,
+  l: 4, t: 5, paper: 'a4',
+  W: 29.7, H: 21, lines: [],     // paper size in cm, y positions of the ruled lines (cm)
+  N: 0, hits: 0,
+  running: false, rate: 5, spawnAcc: 0,
+  history: [], lastHistN: 0,
+  flying: [], effects: [],
+  ring: new Array(RING_MAX), ringStart: 0, ringLen: 0,
+  last: null, lastT: 0, showMeasure: true,
+  pending: 0,                    // needles queued by the big +N buttons, dropped over several frames
+  bestDigits: 0,
+  statsDirty: true, phaseDirty: true, lastStats: 0,
+};
+const G = { dpr: 1, cw: 1, ch: 1, s: 1, ox: 0, oy: 0 };   // stage geometry in device pixels
+
+const stage = $('stage'), cv = $('paper'), ctx = cv.getContext('2d');
+const mk = () => { const c = document.createElement('canvas'); return [c, c.getContext('2d')]; };
+const [bg, bgx] = mk();          // paper + ruled lines
+const [acc, accx] = mk();        // settled needles
+const phCv = $('phase'), phx = phCv.getContext('2d');
+const [phBg, phBgx] = mk();
+const [phPts, phPtsx] = mk();
+const cvCv = $('conv'), cvx = cvCv.getContext('2d');
+
+/* ======================================================================
+   Helpers
+   ====================================================================== */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const locale = () => S.lang === 'cs' ? 'cs-CZ' : 'en-US';
+const dec = (v, d) => v.toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+const int = v => v.toLocaleString(locale());
+const sep = () => S.lang === 'cs' ? ',' : '.';
+const estimate = () => S.hits ? 2 * S.l * S.N / (S.t * S.hits) : NaN;
+const pTheory = () => 2 * S.l / (PI * S.t);
+const font = (px, w = 600) => `${w} ${px * G.dpr}px "Inter", "Segoe UI", system-ui, -apple-system, sans-serif`;
+
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function pill(c, text, x, y, color, align = 'center') {
+  const d = G.dpr;
+  c.font = font(12.5);
+  const w = c.measureText(text).width + 14 * d, h = 22 * d;
+  let bx = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  bx = clamp(bx, 4 * d, G.cw - w - 4 * d);
+  const by = clamp(y - h / 2, 4 * d, G.ch - h - 4 * d);
+  c.fillStyle = 'rgba(6, 9, 24, 0.82)';
+  rr(c, bx, by, w, h, 7 * d); c.fill();
+  c.strokeStyle = color; c.globalAlpha *= 0.6; c.lineWidth = 1 * d; c.stroke(); c.globalAlpha /= 0.6;
+  c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.fillText(text, bx + 7 * d, by + h / 2 + 0.5 * d);
+}
+
+function arrow(c, x1, y1, x2, y2, color, d, both = false) {
+  c.strokeStyle = color; c.fillStyle = color; c.lineWidth = 2 * d;
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  if (len < 10 * d) return;
+  const head = (xa, ya, xb, yb) => {
+    const a = Math.atan2(yb - ya, xb - xa), s = 7 * d;
+    c.beginPath(); c.moveTo(xb, yb);
+    c.lineTo(xb - s * Math.cos(a - 0.45), yb - s * Math.sin(a - 0.45));
+    c.lineTo(xb - s * Math.cos(a + 0.45), yb - s * Math.sin(a + 0.45));
+    c.closePath(); c.fill();
+  };
+  head(x1, y1, x2, y2);
+  if (both) head(x2, y2, x1, y1);
+}
+
+/* ======================================================================
+   Geometry & paper
+   ====================================================================== */
+function margins() {
+  const d = G.dpr;
+  return { mx: 34 * d, mt: 50 * d, mb: 50 * d };
+}
+
+function setPaperDims() {
+  if (S.paper === 'screen') {
+    const { mx, mt, mb } = margins();
+    const aspect = Math.max(0.3, (G.cw - 2 * mx) / Math.max(1, G.ch - mt - mb));
+    if (aspect >= 1) { S.H = 21; S.W = 21 * aspect; } else { S.W = 21; S.H = 21 / aspect; }
+  } else {
+    [S.W, S.H] = PAPERS[S.paper];
+  }
+  // Ruled lines, centred vertically on the sheet.
+  const n = Math.floor(S.H / S.t + 1e-9);
+  const y0 = (S.H - n * S.t) / 2;
+  S.lines = [];
+  for (let k = 0; k <= n; k++) S.lines.push(y0 + k * S.t);
+}
+
+function fit() {
+  const { mx, mt, mb } = margins();
+  G.s = Math.min((G.cw - 2 * mx) / S.W, (G.ch - mt - mb) / S.H);
+  G.ox = (G.cw - S.W * G.s) / 2;
+  G.oy = mt + ((G.ch - mt - mb) - S.H * G.s) / 2;
+}
+
+function drawPaperBg() {
+  const c = bgx, d = G.dpr, s = G.s;
+  const x0 = G.ox, y0 = G.oy, w = S.W * s, h = S.H * s, r = 10 * d;
+  c.clearRect(0, 0, G.cw, G.ch);
+
+  // sheet with a soft glow
+  c.save();
+  c.shadowColor = 'rgba(110, 120, 255, 0.35)'; c.shadowBlur = 60 * d;
+  const g = c.createLinearGradient(x0, y0, x0 + w, y0 + h);
+  g.addColorStop(0, '#121a3d'); g.addColorStop(1, '#0b1029');
+  c.fillStyle = g; rr(c, x0, y0, w, h, r); c.fill();
+  c.restore();
+
+  c.save();
+  rr(c, x0, y0, w, h, r); c.clip();
+  // vignette light
+  const v = c.createRadialGradient(x0 + w * 0.35, y0 + h * 0.3, 0, x0 + w * 0.35, y0 + h * 0.3, Math.max(w, h) * 0.8);
+  v.addColorStop(0, 'rgba(120, 130, 255, 0.10)'); v.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  c.fillStyle = v; c.fillRect(x0, y0, w, h);
+  // faint 1 cm grid
+  c.strokeStyle = 'rgba(150, 170, 255, 0.045)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  for (let x = 1; x < S.W; x++) { c.moveTo(x0 + x * s, y0); c.lineTo(x0 + x * s, y0 + h); }
+  for (let y = 1; y < S.H; y++) { c.moveTo(x0, y0 + y * s); c.lineTo(x0 + w, y0 + y * s); }
+  c.stroke();
+  // paper grain
+  const grains = Math.min(12000, (w * h) / (700 * d * d));
+  for (let i = 0; i < grains; i++) {
+    c.fillStyle = `rgba(200, 210, 255, ${Math.random() * 0.05})`;
+    c.fillRect(x0 + Math.random() * w, y0 + Math.random() * h, d, d);
+  }
+  // ruled lines
+  for (const ly of S.lines) {
+    const Y = y0 + ly * s;
+    c.strokeStyle = 'rgba(139, 123, 255, 0.16)'; c.lineWidth = 8 * d;
+    c.beginPath(); c.moveTo(x0, Y); c.lineTo(x0 + w, Y); c.stroke();
+    c.strokeStyle = 'rgba(190, 180, 255, 0.85)'; c.lineWidth = 1.4 * d;
+    c.beginPath(); c.moveTo(x0, Y); c.lineTo(x0 + w, Y); c.stroke();
+  }
+  c.restore();
+
+  c.strokeStyle = 'rgba(160, 170, 255, 0.28)'; c.lineWidth = 1 * d;
+  rr(c, x0, y0, w, h, r); c.stroke();
+
+  // t marker (between the first two lines, just left of the sheet)
+  if (S.lines.length >= 2) {
+    const ax = G.ox > 30 * d ? x0 - 14 * d : x0 + 14 * d;
+    const ya = y0 + S.lines[0] * s, yb = y0 + S.lines[1] * s;
+    c.globalAlpha = 0.9;
+    arrow(c, ax, (ya + yb) / 2, ax, ya + 1 * d, '#b9b3ff', d);
+    arrow(c, ax, (ya + yb) / 2, ax, yb - 1 * d, '#b9b3ff', d);
+    c.font = font(13, 700); c.fillStyle = '#d7d2ff';
+    c.textAlign = G.ox > 30 * d ? 'right' : 'left'; c.textBaseline = 'middle';
+    c.fillText('t', ax + (G.ox > 30 * d ? -7 : 7) * d, (ya + yb) / 2);
+    c.globalAlpha = 1;
+  }
+
+  // needle length scale bar under the sheet (bottom right)
+  const by = y0 + h + 22 * d, bx1 = x0 + w, bx0 = bx1 - S.l * s;
+  if (by < G.ch - 6 * d) {
+    const gg = c.createLinearGradient(bx0, 0, bx1, 0);
+    gg.addColorStop(0, '#7b5cff'); gg.addColorStop(1, '#ff4fa3');
+    c.strokeStyle = gg; c.lineWidth = 3 * d; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(bx0, by); c.lineTo(bx1, by); c.stroke();
+    c.fillStyle = '#ffb0d6'; c.beginPath(); c.arc(bx0, by, 3 * d, 0, 2 * PI); c.fill();
+    c.font = font(12.5); c.fillStyle = '#c9cff5'; c.textAlign = 'right'; c.textBaseline = 'middle';
+    c.fillText(`l = ${dec(S.l, 1)} cm`, bx0 - 10 * d, by);
+  }
+}
+
+function layoutStage() {
+  const r = stage.getBoundingClientRect();
+  G.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  G.cw = Math.max(1, Math.round(r.width * G.dpr));
+  G.ch = Math.max(1, Math.round(r.height * G.dpr));
+  for (const c of [cv, bg, acc]) { c.width = G.cw; c.height = G.ch; }
+  accClipped = false;                  // resizing a canvas resets its state
+  // In "full area" mode the sheet follows the window, but only while it's empty.
+  if (S.paper === 'screen' && S.N === 0 && !S.flying.length) setPaperDims();
+  fit();
+  drawPaperBg();
+  redrawAccum();
+  updatePaperInfo();
+}
+
+/* ======================================================================
+   Sampling – the actual experiment
+   ====================================================================== */
+function sampleNeedle(near) {
+  // The two random variables of the model:
+  const x = Math.random() * S.t / 2;        // centre ↔ nearest line, U(0, t/2)
+  const theta = Math.random() * PI / 2;     // angle with the lines,  U(0, π/2)
+  const hit = x <= (S.l / 2) * Math.sin(theta);
+
+  // Place the needle on the sheet so that it matches (x, θ). Which line, which side,
+  // and the mirror image of the angle are all symmetric choices – they don't change the statistics.
+  let k, side;
+  if (near) {
+    k = 0;
+    for (let i = 1; i < S.lines.length; i++) if (Math.abs(S.lines[i] - near.y) < Math.abs(S.lines[k] - near.y)) k = i;
+    side = Math.sign(near.y - S.lines[k]) || 1;
+  } else {
+    k = Math.floor(Math.random() * S.lines.length);
+    side = Math.random() < 0.5 ? -1 : 1;
+  }
+  let cy = S.lines[k] + side * x;
+  if (cy < 0 || cy > S.H) { side = -side; cy = S.lines[k] + side * x; }
+  const hl = S.l / 2;
+  const cx = near ? clamp(near.x, hl * 0.2, S.W - hl * 0.2) : hl + Math.random() * (S.W - 2 * hl);
+  const phi = Math.random() < 0.5 ? theta : -theta;
+
+  let px = cx, py = S.lines[k];
+  const dy = Math.sin(phi) * hl;
+  if (hit && Math.abs(dy) > 1e-12) px = cx + ((py - cy) / dy) * Math.cos(phi) * hl;
+  return { x, theta, hit, k, cx, cy, phi, px, py, a: 1 };
+}
+
+const durFor = rate => 1000 / (1 + rate / 8) + 220;
+
+function launch(n, delay, dur) {
+  n.t0 = performance.now() + delay;
+  n.dur = dur;
+  n.spin = (Math.random() - 0.5) * 2.6;
+  S.flying.push(n);
+}
+
+function dropAnimated(count, near) {
+  const stagger = count <= 10 ? 70 : 9;
+  const dur = count === 1 ? 1100 : 750;
+  for (let i = 0; i < count; i++) launch(sampleNeedle(i === 0 ? near : null), i * stagger, dur);
+}
+
+function dropInstant(count) {
+  for (let i = 0; i < count; i++) commit(sampleNeedle(), false);
+}
+
+function drop(count) {
+  if (count <= 100) dropAnimated(count);
+  else S.pending += count;
+}
+
+/* ======================================================================
+   Committing a landed needle
+   ====================================================================== */
+const alphaFor = N => clamp(Math.pow(300 / (N + 300), 0.3), 0.2, 1);
+
+function commit(n, animated) {
+  S.N++;
+  if (n.hit) S.hits++;
+  n.a = alphaFor(S.N);
+  drawSettled(accx, n);
+  ringPush(n);
+  drawPhasePoint(n);
+  pushHistory();
+  S.last = n; S.lastT = performance.now();
+  if (animated) spawnEffect(n);
+  S.statsDirty = true; S.phaseDirty = true;
+}
+
+function ringPush(n) {
+  if (S.ringLen < RING_MAX) S.ring[(S.ringStart + S.ringLen++) % RING_MAX] = n;
+  else { S.ring[S.ringStart] = n; S.ringStart = (S.ringStart + 1) % RING_MAX; }
+}
+function ringEach(fn) { for (let i = 0; i < S.ringLen; i++) fn(S.ring[(S.ringStart + i) % RING_MAX]); }
+
+function pushHistory() {
+  if (!S.hits) return;
+  if (S.N <= 300 || S.N >= S.lastHistN * 1.01) {
+    S.history.push([S.N, estimate()]);
+    S.lastHistN = S.N;
+  }
+}
+
+function needlePath(c, X, Y, dx, dy) { c.beginPath(); c.moveTo(X - dx, Y - dy); c.lineTo(X + dx, Y + dy); }
+
+function drawSettled(c, n) {
+  const s = G.s, d = G.dpr, hl = S.l / 2 * s;
+  const X = G.ox + n.cx * s, Y = G.oy + n.cy * s;
+  const dx = Math.cos(n.phi) * hl, dy = Math.sin(n.phi) * hl;
+  const col = n.hit ? HIT : MISS;
+  c.lineCap = 'round';
+  needlePath(c, X, Y, dx, dy);
+  c.globalAlpha = n.a * 0.22; c.strokeStyle = `rgb(${col.rgb})`; c.lineWidth = 6 * d; c.stroke();
+  c.globalAlpha = n.a; c.lineWidth = 1.8 * d; c.stroke();
+  c.globalAlpha = n.a * 0.7; c.strokeStyle = '#ffffff'; c.lineWidth = 0.6 * d; c.stroke();
+  c.globalAlpha = n.a; c.fillStyle = col.head;
+  c.beginPath(); c.arc(X - dx, Y - dy, 2.3 * d, 0, 2 * PI); c.fill();
+  c.globalAlpha = 1;
+}
+
+// Clears the needle layer and clips it to the sheet, so needles near the edge don't hang off the paper.
+let accClipped = false;
+function resetAccum() {
+  if (accClipped) accx.restore();
+  accx.clearRect(0, 0, G.cw, G.ch);
+  accx.save();
+  rr(accx, G.ox, G.oy, S.W * G.s, S.H * G.s, 10 * G.dpr);
+  accx.clip();
+  accClipped = true;
+}
+
+function redrawAccum() {
+  resetAccum();
+  ringEach(n => drawSettled(accx, n));
+}
+
+/* ======================================================================
+   Effects & flying needles
+   ====================================================================== */
+function spawnEffect(n) {
+  if (S.effects.length > 80) return;
+  S.effects.push({ x: n.hit ? n.px : n.cx, y: n.hit ? n.py : n.cy, t0: performance.now(), hit: n.hit });
+}
+
+function drawEffects(c, now) {
+  const d = G.dpr, s = G.s;
+  c.save();
+  c.globalCompositeOperation = 'lighter';
+  S.effects = S.effects.filter(e => {
+    const life = e.hit ? 950 : 500;
+    const a = Math.max(0, (now - e.t0) / life);   // clicks can commit after this frame's timestamp
+    if (a >= 1) return false;
+    const X = G.ox + e.x * s, Y = G.oy + e.y * s;
+    const ease = 1 - Math.pow(1 - a, 3);
+    if (e.hit) {
+      // flash running along the crossed line
+      const L = (30 + 160 * ease) * d;
+      const lg = c.createLinearGradient(X - L, 0, X + L, 0);
+      lg.addColorStop(0, 'rgba(190,180,255,0)'); lg.addColorStop(0.5, `rgba(230,220,255,${0.9 * (1 - a)})`);
+      lg.addColorStop(1, 'rgba(190,180,255,0)');
+      c.strokeStyle = lg; c.lineWidth = 3 * d;
+      c.beginPath(); c.moveTo(X - L, Y); c.lineTo(X + L, Y); c.stroke();
+      // glow + shock ring
+      const R = 34 * d;
+      const rg = c.createRadialGradient(X, Y, 0, X, Y, R);
+      rg.addColorStop(0, `rgba(255,255,255,${0.9 * (1 - a)})`);
+      rg.addColorStop(0.3, `rgba(255,79,163,${0.6 * (1 - a)})`);
+      rg.addColorStop(1, 'rgba(255,79,163,0)');
+      c.fillStyle = rg; c.beginPath(); c.arc(X, Y, R, 0, 2 * PI); c.fill();
+      c.strokeStyle = `rgba(255,120,190,${1 - a})`; c.lineWidth = 2 * d;
+      c.beginPath(); c.arc(X, Y, (6 + 44 * ease) * d, 0, 2 * PI); c.stroke();
+    } else {
+      c.strokeStyle = `rgba(64,210,255,${0.55 * (1 - a)})`; c.lineWidth = 1.5 * d;
+      c.beginPath(); c.arc(X, Y, (4 + 18 * ease) * d, 0, 2 * PI); c.stroke();
+    }
+    return true;
+  });
+  c.restore();
+}
+
+function drawFlying(c, n, p) {
+  const s = G.s, d = G.dpr;
+  const h = 1 - p * p;                         // height above the paper (gravity: accelerating fall)
+  const hl = S.l / 2 * s * (1 + 0.45 * h);
+  const ang = n.phi + n.spin * h;
+  const fx = G.ox + n.cx * s, fy = G.oy + n.cy * s;
+  const X = fx - h * 16 * d, Y = fy - h * 60 * d;
+  const dx = Math.cos(ang) * hl, dy = Math.sin(ang) * hl;
+  const sdx = Math.cos(ang) * S.l / 2 * s, sdy = Math.sin(ang) * S.l / 2 * s;
+  const fade = clamp(p * 4, 0, 1);
+  c.lineCap = 'round';
+  // shadow on the paper, sharpening as the needle approaches
+  needlePath(c, fx + h * 10 * d, fy + h * 6 * d, sdx, sdy);
+  c.globalAlpha = fade * (0.55 - 0.4 * h); c.strokeStyle = '#000'; c.lineWidth = (3 + 10 * h) * d; c.stroke();
+  // the needle: silver until it lands and reveals its colour
+  needlePath(c, X, Y, dx, dy);
+  c.globalAlpha = fade * 0.3; c.strokeStyle = '#dfe6ff'; c.lineWidth = 8 * d; c.stroke();
+  c.globalAlpha = fade; c.strokeStyle = '#f4f6ff'; c.lineWidth = 2.2 * d; c.stroke();
+  c.fillStyle = '#ffffff';
+  c.beginPath(); c.arc(X - dx, Y - dy, 2.8 * d, 0, 2 * PI); c.fill();
+  c.globalAlpha = 1;
+}
+
+/* ======================================================================
+   Measurement overlay for the last needle (x, θ, ½·l·sin θ)
+   ====================================================================== */
+function drawMeasure(c, n, alpha) {
+  const s = G.s, d = G.dpr, hl = S.l / 2 * s;
+  const cx = G.ox + n.cx * s, cy = G.oy + n.cy * s, ly = G.oy + S.lines[n.k] * s;
+  const sp = Math.sin(n.phi), cp = Math.cos(n.phi);
+  const toward = Math.sign(ly - cy) || 1;               // +1: nearest line is below on screen
+  const sg = sp === 0 ? 1 : (Math.sign(sp) === toward ? 1 : -1);
+  const tx = cx + sg * cp * hl, ty = cy + sg * sp * hl;  // needle tip that points to the line
+  const col = n.hit ? HIT : MISS, colS = `rgb(${col.rgb})`;
+  const right = tx >= cx ? 1 : -1;
+
+  c.save();
+  c.globalAlpha = alpha; c.lineCap = 'round';
+
+  // dark halo so the construction stays readable on a crowded sheet
+  const R = hl * 1.6 + 60 * d;
+  const halo = c.createRadialGradient(cx, cy, 0, cx, cy, R);
+  halo.addColorStop(0, 'rgba(6,9,26,0.82)'); halo.addColorStop(0.6, 'rgba(6,9,26,0.6)'); halo.addColorStop(1, 'rgba(6,9,26,0)');
+  c.fillStyle = halo; c.beginPath(); c.arc(cx, cy, R, 0, 2 * PI); c.fill();
+  const px0 = G.ox, px1 = G.ox + S.W * s;
+  c.strokeStyle = 'rgba(190,180,255,0.85)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(Math.max(px0, cx - R), ly); c.lineTo(Math.min(px1, cx + R), ly); c.stroke();
+
+  // the needle itself, on top and glowing
+  const ndx = cp * hl, ndy = sp * hl;
+  needlePath(c, cx, cy, ndx, ndy);
+  c.strokeStyle = `rgba(${col.rgb},0.35)`; c.lineWidth = 10 * d; c.stroke();
+  c.strokeStyle = colS; c.lineWidth = 3 * d; c.stroke();
+  c.strokeStyle = '#fff'; c.lineWidth = 1 * d; c.stroke();
+
+  // highlight the nearest line
+  const gx = c.createLinearGradient(cx - hl * 1.7, 0, cx + hl * 1.7, 0);
+  gx.addColorStop(0, 'rgba(255,209,102,0)'); gx.addColorStop(0.5, 'rgba(255,209,102,0.9)'); gx.addColorStop(1, 'rgba(255,209,102,0)');
+  c.strokeStyle = gx; c.lineWidth = 3 * d;
+  c.beginPath(); c.moveTo(Math.max(px0, cx - hl * 1.7), ly); c.lineTo(Math.min(px1, cx + hl * 1.7), ly); c.stroke();
+
+  // horizontal reference through the centre + vertical projection ½·l·sin θ
+  c.setLineDash([4 * d, 4 * d]); c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1.2 * d;
+  c.beginPath(); c.moveTo(cx, cy); c.lineTo(tx + right * 10 * d, cy); c.stroke();
+  c.setLineDash([]);
+  c.strokeStyle = colS; c.lineWidth = 2.6 * d;
+  c.beginPath(); c.moveTo(tx, cy); c.lineTo(tx, ty); c.stroke();
+
+  // x: distance from centre to nearest line
+  arrow(c, cx, cy, cx, ly, '#ffd166', d);
+
+  // θ arc
+  const r = clamp(hl * 0.45, 20 * d, 64 * d);
+  const a0 = right > 0 ? 0 : PI;
+  let diff = Math.atan2(ty - cy, tx - cx) - a0;
+  while (diff > PI) diff -= 2 * PI;
+  while (diff < -PI) diff += 2 * PI;
+  c.strokeStyle = '#ffffff'; c.lineWidth = 1.8 * d;
+  c.beginPath(); c.arc(cx, cy, r, a0, a0 + diff, diff < 0); c.stroke();
+
+  // centre
+  c.fillStyle = '#ffd166'; c.shadowColor = '#ffd166'; c.shadowBlur = 12 * d;
+  c.beginPath(); c.arc(cx, cy, 4 * d, 0, 2 * PI); c.fill();
+  c.shadowBlur = 0;
+
+  // labels
+  // θ goes on the side away from the line, ½·l·sin θ on the side towards it – they never overlap
+  pill(c, `θ = ${dec(n.theta * 180 / PI, 1)}°`, cx + right * (r * 0.6), cy - toward * 18 * d, '#ffffff', right > 0 ? 'left' : 'right');
+  pill(c, `x = ${dec(n.x, 2)} cm`, cx - right * 10 * d, (cy + ly) / 2, '#ffd166', right > 0 ? 'right' : 'left');
+  pill(c, `½·l·sin θ = ${dec(S.l / 2 * Math.sin(n.theta), 2)} cm`, tx + right * 10 * d, (cy + ty) / 2, colS, right > 0 ? 'left' : 'right');
+  const vy = cy - toward * (Math.abs(sp) * hl + 48 * d);
+  pill(c, `x ${n.hit ? '≤' : '>'} ½·l·sin θ  ⇒  ${n.hit ? T.crosses : T.nocross}`, cx, vy, colS);
+  c.restore();
+}
+
+/* ======================================================================
+   Phase-space chart (θ, x)
+   ====================================================================== */
+const PH = { pl: 40, pr: 12, pt: 12, pb: 26 };
+function phMap() {
+  const d = G.dpr, w = phCv.width, h = phCv.height;
+  const pl = PH.pl * d, pr = PH.pr * d, pt = PH.pt * d, pb = PH.pb * d;
+  return {
+    X: th => pl + th / (PI / 2) * (w - pl - pr),
+    Y: x => h - pb - x / (S.t / 2) * (h - pt - pb),
+    pl, pr, pt, pb, w, h,
+  };
+}
+
+function curvePath(c, m) {
+  c.beginPath();
+  for (let i = 0; i <= 80; i++) {
+    const th = i / 80 * PI / 2, X = m.X(th), Y = m.Y(S.l / 2 * Math.sin(th));
+    i ? c.lineTo(X, Y) : c.moveTo(X, Y);
+  }
+}
+
+function drawPhaseBg() {
+  const c = phBgx, d = G.dpr, m = phMap();
+  c.clearRect(0, 0, m.w, m.h);
+  c.fillStyle = 'rgba(64,210,255,0.05)';
+  c.fillRect(m.pl, m.pt, m.w - m.pl - m.pr, m.h - m.pt - m.pb);
+  curvePath(c, m);
+  c.lineTo(m.X(PI / 2), m.Y(0)); c.lineTo(m.X(0), m.Y(0)); c.closePath();
+  c.fillStyle = 'rgba(255,79,163,0.14)'; c.fill();
+  // grid & axes
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  c.moveTo(m.X(PI / 4), m.pt); c.lineTo(m.X(PI / 4), m.h - m.pb);
+  c.moveTo(m.pl, m.Y(S.t / 4)); c.lineTo(m.w - m.pr, m.Y(S.t / 4));
+  c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.25)';
+  c.strokeRect(m.pl, m.pt, m.w - m.pl - m.pr, m.h - m.pt - m.pb);
+  c.font = font(11, 500); c.fillStyle = '#8e98c7';
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  [[0, '0'], [PI / 4, 'π/4'], [PI / 2, 'π/2']].forEach(([v, s]) => c.fillText(s, m.X(v), m.h - m.pb + 5 * d));
+  c.fillStyle = '#fff'; c.font = font(12, 700);
+  c.fillText('θ', (m.X(PI / 4) + m.X(PI / 2)) / 2, m.h - m.pb + 5 * d);
+  c.textAlign = 'right'; c.textBaseline = 'middle'; c.font = font(11, 500); c.fillStyle = '#8e98c7';
+  c.fillText('0', m.pl - 6 * d, m.Y(0));
+  c.fillText('t/2', m.pl - 6 * d, m.Y(S.t / 2) + 4 * d);
+  if (m.Y(S.l / 2) - m.Y(S.t / 2) > 16 * d) { c.fillStyle = '#ff8cc6'; c.fillText('l/2', m.pl - 6 * d, m.Y(S.l / 2)); }
+  c.fillStyle = '#fff'; c.font = font(12, 700);
+  c.fillText('x', m.pl - 6 * d, m.Y(S.t / 4));
+}
+
+function drawPhasePoint(n) {
+  const m = phMap(), d = G.dpr, r = 1.2 * d;
+  phPtsx.globalAlpha = Math.max(0.3, n.a) * 0.85;
+  phPtsx.fillStyle = n.hit ? '#ff4fa3' : '#40d2ff';
+  phPtsx.fillRect(m.X(n.theta) - r, m.Y(n.x) - r, 2 * r, 2 * r);
+}
+
+function composePhase(showLast) {
+  const m = phMap(), d = G.dpr, c = phx;
+  c.clearRect(0, 0, m.w, m.h);
+  c.drawImage(phBg, 0, 0);
+  c.drawImage(phPts, 0, 0);
+  c.save();
+  curvePath(c, m);
+  c.strokeStyle = 'rgba(255,79,163,0.35)'; c.lineWidth = 6 * d; c.stroke();
+  c.strokeStyle = '#ffb0d6'; c.lineWidth = 2 * d; c.stroke();
+  c.restore();
+  if (showLast && S.last) {
+    const X = m.X(S.last.theta), Y = m.Y(S.last.x);
+    c.setLineDash([3 * d, 3 * d]); c.strokeStyle = 'rgba(255,209,102,0.7)'; c.lineWidth = 1 * d;
+    c.beginPath(); c.moveTo(X, Y); c.lineTo(X, m.h - m.pb); c.moveTo(X, Y); c.lineTo(m.pl, Y); c.stroke();
+    c.setLineDash([]);
+    c.strokeStyle = '#ffd166'; c.lineWidth = 2 * d;
+    c.beginPath(); c.arc(X, Y, 6 * d, 0, 2 * PI); c.stroke();
+  }
+}
+
+/* ======================================================================
+   Convergence chart
+   ====================================================================== */
+function drawConv() {
+  const c = cvx, d = G.dpr, w = cvCv.width, h = cvCv.height;
+  const pl = 48 * d, pr = 12 * d, pt = 12 * d, pb = 24 * d;
+  c.clearRect(0, 0, w, h);
+  const Nmax = Math.max(100, S.N * 1.05);
+  const LX = Math.log10(Nmax);
+  const X = n => pl + Math.log10(n) / LX * (w - pl - pr);
+
+  const pts = S.history.slice();
+  if (S.hits && (!pts.length || pts[pts.length - 1][0] !== S.N)) pts.push([S.N, estimate()]);
+
+  let dev = 0.03;
+  const from = Math.sqrt(Math.max(1, S.N));
+  for (const [n, e] of pts) if (n >= from) dev = Math.max(dev, Math.abs(e - PI));
+  const yr = Math.min(1.6, dev * 1.25);
+  const Y = e => pt + (1 - (e - (PI - yr)) / (2 * yr)) * (h - pt - pb);
+
+  c.save();
+  c.beginPath(); c.rect(pl, pt, w - pl - pr, h - pt - pb); c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.02)'; c.fillRect(pl, pt, w - pl - pr, h - pt - pb);
+
+  // theoretical ±2σ band
+  const p = pTheory();
+  const up = [], lo = [];
+  for (let i = 0; i <= 80; i++) {
+    const n = Math.pow(10, i / 80 * LX);
+    const sig = PI * Math.sqrt((1 - p) / (p * n));
+    up.push([X(n), Y(PI + 2 * sig)]); lo.push([X(n), Y(PI - 2 * sig)]);
+  }
+  c.beginPath();
+  up.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+  for (let i = lo.length - 1; i >= 0; i--) c.lineTo(lo[i][0], lo[i][1]);
+  c.closePath();
+  c.fillStyle = 'rgba(123,92,255,0.16)'; c.fill();
+
+  // decade grid
+  c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1 * d;
+  c.beginPath();
+  for (let k = 1; k <= Math.floor(LX); k++) { c.moveTo(X(10 ** k), pt); c.lineTo(X(10 ** k), h - pb); }
+  c.stroke();
+
+  // π
+  c.setLineDash([6 * d, 5 * d]); c.strokeStyle = 'rgba(255,209,102,0.85)'; c.lineWidth = 1.4 * d;
+  c.beginPath(); c.moveTo(pl, Y(PI)); c.lineTo(w - pr, Y(PI)); c.stroke(); c.setLineDash([]);
+
+  // estimate
+  if (pts.length) {
+    c.lineJoin = 'round';
+    c.beginPath();
+    pts.forEach(([n, e], i) => i ? c.lineTo(X(n), Y(e)) : c.moveTo(X(n), Y(e)));
+    c.strokeStyle = 'rgba(255,79,163,0.35)'; c.lineWidth = 5 * d; c.stroke();
+    c.strokeStyle = '#ffe0ef'; c.lineWidth = 1.6 * d; c.stroke();
+    const [ln, le] = pts[pts.length - 1];
+    c.fillStyle = '#fff'; c.shadowColor = '#ff4fa3'; c.shadowBlur = 12 * d;
+    c.beginPath(); c.arc(X(ln), Y(le), 3.5 * d, 0, 2 * PI); c.fill(); c.shadowBlur = 0;
+  }
+  c.restore();
+
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1 * d;
+  c.strokeRect(pl, pt, w - pl - pr, h - pt - pb);
+
+  // labels
+  c.font = font(11, 500); c.fillStyle = '#8e98c7'; c.textAlign = 'center'; c.textBaseline = 'top';
+  const names = ['1', '10', '100', '1k', '10k', '100k', '1M', '10M', '100M'];
+  for (let k = 0; k <= Math.floor(LX) && k < names.length; k++) c.fillText(names[k], X(10 ** k), h - pb + 5 * d);
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  const dd = yr < 0.05 ? 3 : 2;
+  c.fillText(dec(PI + yr, dd), pl - 6 * d, pt + 6 * d);
+  c.fillText(dec(PI - yr, dd), pl - 6 * d, h - pb - 6 * d);
+  c.fillStyle = '#ffd166'; c.font = font(12, 700);
+  c.fillText('π', pl - 6 * d, Y(PI));
+}
+
+function resizeCharts() {
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  for (const [el, extra] of [[phCv, [phBg, phPts]], [cvCv, []]]) {
+    const w = Math.max(1, Math.round(el.clientWidth * d)), h = Math.max(1, Math.round(el.clientHeight * d));
+    el.width = w; el.height = h;
+    for (const e of extra) { e.width = w; e.height = h; }
+  }
+  drawPhaseBg();
+  phPtsx.clearRect(0, 0, phPts.width, phPts.height);
+  ringEach(drawPhasePoint);
+  S.phaseDirty = true; S.statsDirty = true;
+}
+
+/* ======================================================================
+   Stats panel
+   ====================================================================== */
+function updateStats() {
+  $('stN').textContent = int(S.N);
+  $('stH').textContent = int(S.hits);
+  $('stP').textContent = S.N ? dec(S.hits / S.N, 4) : '—';
+  $('stPT').textContent = dec(pTheory(), 4);
+  $('piTrue').textContent = `π = ${PI_DIGITS.slice(0, 10).replace('.', sep())}…`;
+
+  const e = estimate();
+  const badge = $('badge');
+  if (!isFinite(e)) {
+    $('piValue').innerHTML = '<span class="no">—</span>';
+    $('piErr').textContent = '';
+    badge.textContent = T.digits(0);
+  } else {
+    const str = e < 10 ? e.toFixed(6) : e.toFixed(3);
+    let i = 0;
+    while (i < str.length && str[i] === PI_DIGITS[i]) i++;
+    const shown = str.replace('.', sep());
+    $('piValue').innerHTML = `<span class="ok">${shown.slice(0, i)}</span><span class="no">${shown.slice(i)}</span>`;
+    const err = Math.abs(e - PI);
+    $('piErr').textContent = `${T.err} ${dec(err, 5)} (${dec(err / PI * 100, 3)} %)`;
+    const digits = Math.max(0, i - 2);
+    badge.textContent = T.digits(digits);
+    if (digits > S.bestDigits && S.N > 20) {
+      badge.classList.add('pop'); setTimeout(() => badge.classList.remove('pop'), 300);
+    }
+    S.bestDigits = Math.max(S.bestDigits, digits);
+  }
+  $('formula').textContent = S.hits
+    ? `π ≈ 2·l·N / (t·H) = 2·${dec(S.l, 1)}·${int(S.N)} / (${dec(S.t, 1)}·${int(S.hits)})`
+    : 'π ≈ 2·l·N / (t·H)';
+  $('hint').classList.toggle('hidden', S.N > 0 || S.flying.length > 0);
+  drawConv();
+}
+
+function updatePaperInfo() {
+  const name = S.paper === 'screen' ? T.paperScreen : S.paper.toUpperCase();
+  $('paperInfo').innerHTML =
+    `<span class="chip"><b>${name}</b> · ${dec(S.W, 1)} × ${dec(S.H, 1)} cm</span>` +
+    `<span class="chip">l = <b>${dec(S.l, 1)} cm</b></span>` +
+    `<span class="chip">t = <b>${dec(S.t, 1)} cm</b></span>` +
+    `<span class="chip"><b>${S.lines.length}</b> ${T.lines}</span>`;
+}
+
+/* ======================================================================
+   Reset & main loop
+   ====================================================================== */
+function reset() {
+  S.N = 0; S.hits = 0; S.history = []; S.lastHistN = 0; S.pending = 0;
+  S.flying = []; S.effects = []; S.ringStart = 0; S.ringLen = 0;
+  S.last = null; S.spawnAcc = 0; S.bestDigits = 0;
+  setPaperDims();
+  fit();
+  drawPaperBg();
+  resetAccum();
+  drawPhaseBg();
+  phPtsx.clearRect(0, 0, phPts.width, phPts.height);
+  updatePaperInfo();
+  S.statsDirty = true; S.phaseDirty = true;
+}
+
+function measureVisible() {
+  return S.showMeasure && S.last && (!S.running || S.rate <= 4);
+}
+
+let prev = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - prev) / 1000);
+  prev = now;
+
+  if (S.running) {
+    S.spawnAcc += S.rate * dt;
+    let n = Math.floor(S.spawnAcc);
+    S.spawnAcc -= n;
+    n = Math.min(n, 500);
+    if (S.rate <= 150) {
+      for (let i = 0; i < n; i++) launch(sampleNeedle(), i * (dt * 1000 / n), durFor(S.rate));
+    } else {
+      dropInstant(n);
+    }
+  }
+
+  // big batches: a few thousand per frame keeps the page responsive
+  if (S.pending) {
+    const n = Math.min(S.pending, 5000);
+    S.pending -= n;
+    dropInstant(n);
+  }
+
+  // land the needles whose fall is over
+  if (S.flying.length) {
+    const still = [];
+    for (const n of S.flying) {
+      if (now - n.t0 >= n.dur) commit(n, true); else still.push(n);
+    }
+    S.flying = still;
+  }
+
+  ctx.clearRect(0, 0, G.cw, G.ch);
+  ctx.drawImage(bg, 0, 0);
+  ctx.drawImage(acc, 0, 0);
+  drawEffects(ctx, now);
+  if (measureVisible()) drawMeasure(ctx, S.last, clamp((now - S.lastT) / 350, 0, 1));
+  for (const n of S.flying) {
+    const p = (now - n.t0) / n.dur;
+    if (p >= 0) drawFlying(ctx, n, p);
+  }
+
+  if (S.phaseDirty) { composePhase(measureVisible()); S.phaseDirty = false; }
+  if (S.statsDirty && now - S.lastStats > 80) { updateStats(); S.statsDirty = false; S.lastStats = now; }
+
+  requestAnimationFrame(frame);
+}
+
+/* ======================================================================
+   UI wiring
+   ====================================================================== */
+const lSlider = $('lSlider'), tSlider = $('tSlider'), rSlider = $('rSlider');
+const RATE_MAX = 5000;
+const rateFromSlider = v => Math.max(1, Math.round(Math.pow(10, v / 1000 * Math.log10(RATE_MAX))));
+const sliderFromRate = r => Math.round(Math.log10(r) / Math.log10(RATE_MAX) * 1000);
+
+function paintSlider(el) {
+  const f = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--fill', f + '%');
+}
+
+function syncControls() {
+  lSlider.value = S.l; tSlider.value = S.t; rSlider.value = sliderFromRate(S.rate);
+  $('lVal').textContent = `${dec(S.l, 1)} cm`;
+  $('tVal').textContent = `${dec(S.t, 1)} cm`;
+  $('rVal').textContent = `${int(S.rate)} ${T.perSec}`;
+  [lSlider, tSlider, rSlider].forEach(paintSlider);
+  $('btnPlay').textContent = S.running ? T.pause : T.start;
+  document.querySelectorAll('#paperSeg button').forEach(b => b.classList.toggle('on', b.dataset.paper === S.paper));
+}
+
+lSlider.addEventListener('input', () => {
+  S.l = +lSlider.value;
+  if (S.l > S.t) S.t = S.l;            // keep the short-needle condition l ≤ t
+  syncControls(); reset();
+});
+tSlider.addEventListener('input', () => {
+  S.t = +tSlider.value;
+  if (S.l > S.t) S.l = S.t;
+  syncControls(); reset();
+});
+rSlider.addEventListener('input', () => { S.rate = rateFromSlider(+rSlider.value); syncControls(); S.phaseDirty = true; });
+
+document.querySelectorAll('#paperSeg button').forEach(b => b.addEventListener('click', () => {
+  S.paper = b.dataset.paper; syncControls(); reset();
+}));
+
+function togglePlay() { S.running = !S.running; syncControls(); S.phaseDirty = true; }
+$('btnPlay').addEventListener('click', togglePlay);
+$('btnReset').addEventListener('click', reset);
+document.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => drop(+b.dataset.drop)));
+$('measureChk').addEventListener('change', e => { S.showMeasure = e.target.checked; S.phaseDirty = true; });
+
+cv.addEventListener('pointerdown', e => {
+  const r = cv.getBoundingClientRect();
+  const x = ((e.clientX - r.left) * G.dpr - G.ox) / G.s;
+  const y = ((e.clientY - r.top) * G.dpr - G.oy) / G.s;
+  if (x < 0 || y < 0 || x > S.W || y > S.H) return;
+  dropAnimated(1, { x, y });
+});
+
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+$('btnFull').addEventListener('click', toggleFull);
+
+function setLang(lang) {
+  S.lang = lang; T = I18N[lang];
+  document.documentElement.lang = lang;
+  document.title = T.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = T[el.dataset.i18n]; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = T[el.dataset.i18nTitle]; });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = T[el.dataset.i18nHtml]; });
+  $('theoryBody').innerHTML = T.theoryHtml;
+  $('btnLang').textContent = lang === 'cs' ? 'EN' : 'CZ';
+  syncControls();
+  updatePaperInfo();
+  if (G.cw > 1) { drawPaperBg(); drawPhaseBg(); }
+  S.statsDirty = true; S.phaseDirty = true;
+}
+$('btnLang').addEventListener('click', () => setLang(S.lang === 'cs' ? 'en' : 'cs'));
+
+const modal = $('modal');
+$('btnTheory').addEventListener('click', () => modal.classList.add('open'));
+$('btnClose').addEventListener('click', () => modal.classList.remove('open'));
+modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+window.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'escape') { modal.classList.remove('open'); return; }
+  if (k === ' ') { e.preventDefault(); togglePlay(); }
+  else if (k === 'n' || k === 'enter') { e.preventDefault(); dropAnimated(1); }
+  else if (k === 'r') reset();
+  else if (k === 'f') toggleFull();
+  else if (k === 'l') setLang(S.lang === 'cs' ? 'en' : 'cs');
+});
+
+let resizeQueued = false;
+new ResizeObserver(() => {
+  if (resizeQueued) return;
+  resizeQueued = true;
+  requestAnimationFrame(() => { resizeQueued = false; layoutStage(); resizeCharts(); });
+}).observe(stage);
+new ResizeObserver(() => resizeCharts()).observe(cvCv);
+
+/* ---------- start ---------- */
+setLang(DEFAULT_LANG);
+layoutStage();
+resizeCharts();
+reset();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
