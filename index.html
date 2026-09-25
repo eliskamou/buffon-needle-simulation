@@ -183,6 +183,8 @@
     border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); border-radius: 999px;
     font: inherit; font-size: 11px; font-weight: 700; padding: 2px 8px; cursor: pointer;
   }
+  /* only on the Repeats tab; hidden (not removed) so the header keeps its height */
+  .histbtns.off { visibility: hidden; }
   .histbtns button:hover { border-color: rgba(255,79,163,.6); background: rgba(255,79,163,.15); }
   .chart { width: 100%; height: 132px; display: block; }
   @media (min-height: 1150px) { .chart { height: 175px; } }
@@ -311,7 +313,7 @@
       <div class="card">
         <h3>
           <span><button class="tab on" data-tab="conv" data-i18n="convergence"></button><button class="tab" data-tab="hist" data-i18n="repeat"></button></span>
-          <span class="histbtns"><span data-i18n="repeatRuns"></span><button data-hist="100">100</button><button data-hist="1000">1k</button><button data-hist="10000">10k</button></span>
+          <span class="histbtns off"><span data-i18n="repeatRuns"></span><button data-hist="100">100</button><button data-hist="1000">1k</button><button data-hist="10000">10k</button></span>
         </h3>
         <canvas class="chart" id="conv"></canvas>
         <div class="chart-note" id="histNote" data-i18n="histNote" hidden></div>
@@ -1277,6 +1279,7 @@ function drawChart() { REP.tab === 'hist' ? drawHist() : drawConv(); }
 function setTab(tab) {
   REP.tab = tab;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelector('.histbtns').classList.toggle('off', tab !== 'hist');
   $('histNote').hidden = tab !== 'hist';
   drawChart();
 }
